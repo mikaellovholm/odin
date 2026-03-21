@@ -12,14 +12,22 @@
 		264FCA2C8040035C19E1AF23 /* TodoListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C11DB5027B63A2CD1CD456F /* TodoListView.swift */; };
 		30C4C370C15D9484E044C4E0 /* OdinApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92229AE62A4F4866B847FDF9 /* OdinApp.swift */; };
 		3143C3771A9157A6E48C615A /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39B376FE7B27991981627FE7 /* ContentView.swift */; };
+		33282E768A6FC8E4AD21712F /* NoteListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9AB1AC0BCA301129BACB543 /* NoteListView.swift */; };
+		3A9CB194035ADF2E6CE8F5BC /* NoteListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9AB1AC0BCA301129BACB543 /* NoteListView.swift */; };
+		3EEF1BD067B06293E62A79C8 /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72D17AC86E81FBBA94DA326B /* Note.swift */; };
 		451E42087B4087C9D410D539 /* TodoItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D0EF2DF0DAD65D91FFC983 /* TodoItem.swift */; };
+		647EFF06B56DCB0731484910 /* NoteDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70070FA6289B0DD9F95EC3B3 /* NoteDetailView.swift */; };
 		83F501531C44AFD915AF8F24 /* TodoListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C11DB5027B63A2CD1CD456F /* TodoListView.swift */; };
+		8BA2B94816A92DDB3F4AC5D1 /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72D17AC86E81FBBA94DA326B /* Note.swift */; };
 		95024FABA022A731A4C149B6 /* TodoRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56A3A736DD573535BBE5AC5E /* TodoRowView.swift */; };
 		98C25368762B9E0E4086C02A /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18877F4B043CE7B21BC4A623 /* NotificationManager.swift */; };
 		AD7469B2DC7C56988FB8FA36 /* TodoRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56A3A736DD573535BBE5AC5E /* TodoRowView.swift */; };
+		BB2217C332EEA41E899D8C81 /* NoteDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70070FA6289B0DD9F95EC3B3 /* NoteDetailView.swift */; };
+		C1683C9651240510E81E7C6B /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 8424CB7A0A4D96724F6F40B7 /* MarkdownUI */; };
 		C315F111518D6619D97EDE83 /* TodoItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D0EF2DF0DAD65D91FFC983 /* TodoItem.swift */; };
 		C46E7F1D09BB655C578A9E92 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39B376FE7B27991981627FE7 /* ContentView.swift */; };
 		DB1BC382437BEE4E5DBA4242 /* OdinApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92229AE62A4F4866B847FDF9 /* OdinApp.swift */; };
+		DB731EF0068490417D98250C /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = CEEEDD7889379A635A1034AB /* MarkdownUI */; };
 		E4DE9EFF92E33D14112F2890 /* TodoDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 013B2A33FC78BCD8093B473B /* TodoDetailView.swift */; };
 /* End PBXBuildFile section */
 
@@ -31,16 +39,39 @@
 		4C11DB5027B63A2CD1CD456F /* TodoListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoListView.swift; sourceTree = "<group>"; };
 		56A3A736DD573535BBE5AC5E /* TodoRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoRowView.swift; sourceTree = "<group>"; };
 		6174C9E8C5BBC6F921CB004B /* Odin.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Odin.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		70070FA6289B0DD9F95EC3B3 /* NoteDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteDetailView.swift; sourceTree = "<group>"; };
+		72D17AC86E81FBBA94DA326B /* Note.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Note.swift; sourceTree = "<group>"; };
 		77D0EF2DF0DAD65D91FFC983 /* TodoItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoItem.swift; sourceTree = "<group>"; };
 		92229AE62A4F4866B847FDF9 /* OdinApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OdinApp.swift; sourceTree = "<group>"; };
+		A9AB1AC0BCA301129BACB543 /* NoteListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteListView.swift; sourceTree = "<group>"; };
 		AA9DFA07774A46A8995234BB /* Odin.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Odin.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C6161BB352FD3DE0E060A9E7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		8AD821415BD621DE611DEE5E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C1683C9651240510E81E7C6B /* MarkdownUI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D21C864254D59CA4CA93FF8D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DB731EF0068490417D98250C /* MarkdownUI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		0E3C19791239E841F5BBAD3C /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				72D17AC86E81FBBA94DA326B /* Note.swift */,
 				77D0EF2DF0DAD65D91FFC983 /* TodoItem.swift */,
 			);
 			path = Models;
@@ -57,6 +88,15 @@
 				0E3C19791239E841F5BBAD3C /* Models */,
 			);
 			path = Odin;
+			sourceTree = "<group>";
+		};
+		8C53BBA04E857337EA9ABD22 /* Notes */ = {
+			isa = PBXGroup;
+			children = (
+				70070FA6289B0DD9F95EC3B3 /* NoteDetailView.swift */,
+				A9AB1AC0BCA301129BACB543 /* NoteListView.swift */,
+			);
+			path = Notes;
 			sourceTree = "<group>";
 		};
 		9B408567954A72857E7717EA /* Todos */ = {
@@ -90,6 +130,7 @@
 		D7025106A47F801A7AD97B03 /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				8C53BBA04E857337EA9ABD22 /* Notes */,
 				9B408567954A72857E7717EA /* Todos */,
 			);
 			path = Features;
@@ -103,6 +144,7 @@
 			buildConfigurationList = 5D2BABD158F8317553ED8B67 /* Build configuration list for PBXNativeTarget "Odin_iOS" */;
 			buildPhases = (
 				F5A28FCCD8447812ED392B3B /* Sources */,
+				8AD821415BD621DE611DEE5E /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -110,6 +152,7 @@
 			);
 			name = Odin_iOS;
 			packageProductDependencies = (
+				8424CB7A0A4D96724F6F40B7 /* MarkdownUI */,
 			);
 			productName = Odin_iOS;
 			productReference = AA9DFA07774A46A8995234BB /* Odin.app */;
@@ -120,6 +163,7 @@
 			buildConfigurationList = 6D321E235D84F5ADF5AF789B /* Build configuration list for PBXNativeTarget "Odin_macOS" */;
 			buildPhases = (
 				72F38521E8B250FEAC646516 /* Sources */,
+				D21C864254D59CA4CA93FF8D /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -127,6 +171,7 @@
 			);
 			name = Odin_macOS;
 			packageProductDependencies = (
+				CEEEDD7889379A635A1034AB /* MarkdownUI */,
 			);
 			productName = Odin_macOS;
 			productReference = 6174C9E8C5BBC6F921CB004B /* Odin.app */;
@@ -160,6 +205,9 @@
 			);
 			mainGroup = B880362902C451C751EEECCF;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				B67E299FE65813A8DB8F6E70 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B31B50C37FD04E7FB3F33395 /* Products */;
 			projectDirPath = "";
@@ -177,6 +225,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				3143C3771A9157A6E48C615A /* ContentView.swift in Sources */,
+				3EEF1BD067B06293E62A79C8 /* Note.swift in Sources */,
+				647EFF06B56DCB0731484910 /* NoteDetailView.swift in Sources */,
+				3A9CB194035ADF2E6CE8F5BC /* NoteListView.swift in Sources */,
 				024F46C49481F017EE22FE32 /* NotificationManager.swift in Sources */,
 				30C4C370C15D9484E044C4E0 /* OdinApp.swift in Sources */,
 				063F90B72537DA1558B41DD5 /* TodoDetailView.swift in Sources */,
@@ -191,6 +242,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				C46E7F1D09BB655C578A9E92 /* ContentView.swift in Sources */,
+				8BA2B94816A92DDB3F4AC5D1 /* Note.swift in Sources */,
+				BB2217C332EEA41E899D8C81 /* NoteDetailView.swift in Sources */,
+				33282E768A6FC8E4AD21712F /* NoteListView.swift in Sources */,
 				98C25368762B9E0E4086C02A /* NotificationManager.swift in Sources */,
 				DB1BC382437BEE4E5DBA4242 /* OdinApp.swift in Sources */,
 				E4DE9EFF92E33D14112F2890 /* TodoDetailView.swift in Sources */,
@@ -449,6 +503,30 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		B67E299FE65813A8DB8F6E70 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/gonzalezreal/swift-markdown-ui";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.4.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		8424CB7A0A4D96724F6F40B7 /* MarkdownUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B67E299FE65813A8DB8F6E70 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
+			productName = MarkdownUI;
+		};
+		CEEEDD7889379A635A1034AB /* MarkdownUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B67E299FE65813A8DB8F6E70 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
+			productName = MarkdownUI;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = CAA6BC363B730AD33F0F3517 /* Project object */;
 }

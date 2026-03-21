@@ -117,28 +117,27 @@ GCP VM (claude-dev-vm, ephemeral IP from Cloud Function)
 
 ## Build Phases
 
-### Phase 1: Todos (validates full pipeline) — DONE (UX fixes remaining)
+### Phase 1: Todos (validates full pipeline) — DONE
 1. ~~Create Xcode multiplatform project with CloudKit entitlement~~
 2. ~~Define TodoItem model, configure ModelContainer~~
 3. ~~Build TodoListView, TodoRowView, TodoDetailView~~
 4. ~~Implement NotificationManager for reminders~~
-5. Test sync between iPhone and Mac via CloudKit (requires signing in Xcode)
-6. Wire TodoRowView tap to TodoDetailView for editing (currently unreachable)
-7. Add drag-to-reorder (`.onMove`) — sortOrder exists on model but isn't exposed
-8. Add delete confirmation or undo support via `UndoManager`
-9. Constrain reminder DatePicker to future dates (`in: Date()...`)
-10. Add "Clear Completed" button in completed section header
-11. Defer notification permission request to first reminder creation (not app launch)
+5. ~~Test sync between iPhone and Mac via CloudKit~~
+6. ~~Wire TodoRowView tap to TodoDetailView for editing~~
+7. ~~Add drag-to-reorder (`.onMove`)~~
+8. ~~Constrain reminder DatePicker to future dates (`in: Date()...`)~~
+9. ~~Add "Clear Completed" button in completed section header~~
+10. ~~Defer notification permission request to first reminder creation~~
 
 **Notes:** Using XcodeGen (`project.yml`). Targets: iOS 18+, macOS 15+ (required for `Tab` API). User needs to set Development Team and enable iCloud capability in Xcode before testing sync.
 
-### Phase 2: Notes
-1. Add MarkdownUI dependency
-2. Define Note model
-3. Build NoteListView with search + pinning
-4. Build editor/preview with toggle on iPhone; default to side-by-side on Mac (fall back to toggle when window is narrow)
-5. Auto-save with debounce — write directly to SwiftData (not a temp buffer) to avoid data loss on app kill
-6. Add macOS markdown keyboard shortcuts (Cmd+B, Cmd+I, etc.) — plan with the editor, not deferred to Phase 4
+### Phase 2: Notes — DONE
+1. ~~Add MarkdownUI dependency (swift-markdown-ui 2.4.1)~~
+2. ~~Define Note model (id, title, content, createdAt, updatedAt, isPinned)~~
+3. ~~Build NoteListView with search + pinning (NavigationSplitView, swipe actions)~~
+4. ~~Build editor/preview: side-by-side on wide screens (>700px), toggle on iPhone~~
+5. ~~Auto-save with debounce — direct @Bindable binding, debounced updatedAt~~
+6. Markdown keyboard shortcuts (Cmd+B, Cmd+I) — deferred to Phase 4 (SwiftUI TextEditor lacks cursor access)
 
 ### Phase 3: Terminal
 1. Add SwiftTerm + Citadel dependencies

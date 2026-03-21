@@ -7,7 +7,7 @@ struct OdinApp: App {
 
     init() {
         do {
-            let schema = Schema([TodoItem.self])
+            let schema = Schema([TodoItem.self, Note.self])
             let config = ModelConfiguration(
                 schema: schema,
                 cloudKitDatabase: .automatic
