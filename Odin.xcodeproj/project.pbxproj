@@ -1,0 +1,454 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		024F46C49481F017EE22FE32 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18877F4B043CE7B21BC4A623 /* NotificationManager.swift */; };
+		063F90B72537DA1558B41DD5 /* TodoDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 013B2A33FC78BCD8093B473B /* TodoDetailView.swift */; };
+		264FCA2C8040035C19E1AF23 /* TodoListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C11DB5027B63A2CD1CD456F /* TodoListView.swift */; };
+		30C4C370C15D9484E044C4E0 /* OdinApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92229AE62A4F4866B847FDF9 /* OdinApp.swift */; };
+		3143C3771A9157A6E48C615A /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39B376FE7B27991981627FE7 /* ContentView.swift */; };
+		451E42087B4087C9D410D539 /* TodoItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D0EF2DF0DAD65D91FFC983 /* TodoItem.swift */; };
+		83F501531C44AFD915AF8F24 /* TodoListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C11DB5027B63A2CD1CD456F /* TodoListView.swift */; };
+		95024FABA022A731A4C149B6 /* TodoRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56A3A736DD573535BBE5AC5E /* TodoRowView.swift */; };
+		98C25368762B9E0E4086C02A /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18877F4B043CE7B21BC4A623 /* NotificationManager.swift */; };
+		AD7469B2DC7C56988FB8FA36 /* TodoRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56A3A736DD573535BBE5AC5E /* TodoRowView.swift */; };
+		C315F111518D6619D97EDE83 /* TodoItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D0EF2DF0DAD65D91FFC983 /* TodoItem.swift */; };
+		C46E7F1D09BB655C578A9E92 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39B376FE7B27991981627FE7 /* ContentView.swift */; };
+		DB1BC382437BEE4E5DBA4242 /* OdinApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92229AE62A4F4866B847FDF9 /* OdinApp.swift */; };
+		E4DE9EFF92E33D14112F2890 /* TodoDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 013B2A33FC78BCD8093B473B /* TodoDetailView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		013B2A33FC78BCD8093B473B /* TodoDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoDetailView.swift; sourceTree = "<group>"; };
+		0B0D48A48C52E57996F25790 /* Odin.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Odin.entitlements; sourceTree = "<group>"; };
+		18877F4B043CE7B21BC4A623 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
+		39B376FE7B27991981627FE7 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		4C11DB5027B63A2CD1CD456F /* TodoListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoListView.swift; sourceTree = "<group>"; };
+		56A3A736DD573535BBE5AC5E /* TodoRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoRowView.swift; sourceTree = "<group>"; };
+		6174C9E8C5BBC6F921CB004B /* Odin.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Odin.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		77D0EF2DF0DAD65D91FFC983 /* TodoItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoItem.swift; sourceTree = "<group>"; };
+		92229AE62A4F4866B847FDF9 /* OdinApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OdinApp.swift; sourceTree = "<group>"; };
+		AA9DFA07774A46A8995234BB /* Odin.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Odin.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C6161BB352FD3DE0E060A9E7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		0E3C19791239E841F5BBAD3C /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				77D0EF2DF0DAD65D91FFC983 /* TodoItem.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		156A7ED42BA6B368ECC1BD96 /* Odin */ = {
+			isa = PBXGroup;
+			children = (
+				39B376FE7B27991981627FE7 /* ContentView.swift */,
+				C6161BB352FD3DE0E060A9E7 /* Info.plist */,
+				0B0D48A48C52E57996F25790 /* Odin.entitlements */,
+				92229AE62A4F4866B847FDF9 /* OdinApp.swift */,
+				D7025106A47F801A7AD97B03 /* Features */,
+				0E3C19791239E841F5BBAD3C /* Models */,
+			);
+			path = Odin;
+			sourceTree = "<group>";
+		};
+		9B408567954A72857E7717EA /* Todos */ = {
+			isa = PBXGroup;
+			children = (
+				18877F4B043CE7B21BC4A623 /* NotificationManager.swift */,
+				013B2A33FC78BCD8093B473B /* TodoDetailView.swift */,
+				4C11DB5027B63A2CD1CD456F /* TodoListView.swift */,
+				56A3A736DD573535BBE5AC5E /* TodoRowView.swift */,
+			);
+			path = Todos;
+			sourceTree = "<group>";
+		};
+		B31B50C37FD04E7FB3F33395 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AA9DFA07774A46A8995234BB /* Odin.app */,
+				6174C9E8C5BBC6F921CB004B /* Odin.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		B880362902C451C751EEECCF = {
+			isa = PBXGroup;
+			children = (
+				156A7ED42BA6B368ECC1BD96 /* Odin */,
+				B31B50C37FD04E7FB3F33395 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		D7025106A47F801A7AD97B03 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				9B408567954A72857E7717EA /* Todos */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		90DF0826675661693392DF54 /* Odin_iOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5D2BABD158F8317553ED8B67 /* Build configuration list for PBXNativeTarget "Odin_iOS" */;
+			buildPhases = (
+				F5A28FCCD8447812ED392B3B /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Odin_iOS;
+			packageProductDependencies = (
+			);
+			productName = Odin_iOS;
+			productReference = AA9DFA07774A46A8995234BB /* Odin.app */;
+			productType = "com.apple.product-type.application";
+		};
+		B881169EF3F323D58A53E45D /* Odin_macOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6D321E235D84F5ADF5AF789B /* Build configuration list for PBXNativeTarget "Odin_macOS" */;
+			buildPhases = (
+				72F38521E8B250FEAC646516 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Odin_macOS;
+			packageProductDependencies = (
+			);
+			productName = Odin_macOS;
+			productReference = 6174C9E8C5BBC6F921CB004B /* Odin.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		CAA6BC363B730AD33F0F3517 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					90DF0826675661693392DF54 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					B881169EF3F323D58A53E45D = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 580E15A80F3362B84EE8DE41 /* Build configuration list for PBXProject "Odin" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = B880362902C451C751EEECCF;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = B31B50C37FD04E7FB3F33395 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				90DF0826675661693392DF54 /* Odin_iOS */,
+				B881169EF3F323D58A53E45D /* Odin_macOS */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		72F38521E8B250FEAC646516 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3143C3771A9157A6E48C615A /* ContentView.swift in Sources */,
+				024F46C49481F017EE22FE32 /* NotificationManager.swift in Sources */,
+				30C4C370C15D9484E044C4E0 /* OdinApp.swift in Sources */,
+				063F90B72537DA1558B41DD5 /* TodoDetailView.swift in Sources */,
+				451E42087B4087C9D410D539 /* TodoItem.swift in Sources */,
+				83F501531C44AFD915AF8F24 /* TodoListView.swift in Sources */,
+				95024FABA022A731A4C149B6 /* TodoRowView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F5A28FCCD8447812ED392B3B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C46E7F1D09BB655C578A9E92 /* ContentView.swift in Sources */,
+				98C25368762B9E0E4086C02A /* NotificationManager.swift in Sources */,
+				DB1BC382437BEE4E5DBA4242 /* OdinApp.swift in Sources */,
+				E4DE9EFF92E33D14112F2890 /* TodoDetailView.swift in Sources */,
+				C315F111518D6619D97EDE83 /* TodoItem.swift in Sources */,
+				264FCA2C8040035C19E1AF23 /* TodoListView.swift in Sources */,
+				AD7469B2DC7C56988FB8FA36 /* TodoRowView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		10015438472B613E97578CB1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Odin/Odin.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Odin/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mikaellovholm.odin;
+				PRODUCT_NAME = Odin;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		2C8F20813AB8CCEA4D7F5CA1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		41543C52E5986A4CABDC0BD3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		5DABCE58869E38FEB2D327B1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Odin/Odin.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Odin/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mikaellovholm.odin;
+				PRODUCT_NAME = Odin;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		69C3DD65F68E79D9428C4A20 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Odin/Odin.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Odin/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mikaellovholm.odin;
+				PRODUCT_NAME = Odin;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		AE96D4ECCB30BDF50C42D434 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Odin/Odin.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Odin/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mikaellovholm.odin;
+				PRODUCT_NAME = Odin;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		580E15A80F3362B84EE8DE41 /* Build configuration list for PBXProject "Odin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				41543C52E5986A4CABDC0BD3 /* Debug */,
+				2C8F20813AB8CCEA4D7F5CA1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		5D2BABD158F8317553ED8B67 /* Build configuration list for PBXNativeTarget "Odin_iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				10015438472B613E97578CB1 /* Debug */,
+				5DABCE58869E38FEB2D327B1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		6D321E235D84F5ADF5AF789B /* Build configuration list for PBXNativeTarget "Odin_macOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				69C3DD65F68E79D9428C4A20 /* Debug */,
+				AE96D4ECCB30BDF50C42D434 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = CAA6BC363B730AD33F0F3517 /* Project object */;
+}
