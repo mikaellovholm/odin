@@ -7,8 +7,7 @@ struct ContentView: View {
                 TodoListView()
             }
             Tab("Notes", systemImage: "note.text") {
-                Text("Notes — coming soon")
-                    .foregroundStyle(.secondary)
+                NoteListView()
             }
             Tab("Terminal", systemImage: "terminal") {
                 Text("Terminal — coming soon")

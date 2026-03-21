@@ -7,6 +7,11 @@ options:
   xcodeVersion: "16.0"
   generateEmptyDirectories: true
 
+packages:
+  MarkdownUI:
+    url: https://github.com/gonzalezreal/swift-markdown-ui
+    from: "2.4.0"
+
 targets:
   Odin:
     type: application
@@ -32,3 +37,5 @@ targets:
         DEVELOPMENT_TEAM: ""
         CODE_SIGN_IDENTITY: "-"
         GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - package: MarkdownUI
