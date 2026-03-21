@@ -117,12 +117,14 @@ GCP VM (claude-dev-vm, ephemeral IP from Cloud Function)
 
 ## Build Phases
 
-### Phase 1: Todos (validates full pipeline)
-1. Create Xcode multiplatform project with CloudKit entitlement
-2. Define TodoItem model, configure ModelContainer
-3. Build TodoListView, TodoRowView, TodoDetailView
-4. Implement NotificationManager for reminders
-5. Test sync between iPhone and Mac via CloudKit
+### Phase 1: Todos (validates full pipeline) — DONE
+1. ~~Create Xcode multiplatform project with CloudKit entitlement~~
+2. ~~Define TodoItem model, configure ModelContainer~~
+3. ~~Build TodoListView, TodoRowView, TodoDetailView~~
+4. ~~Implement NotificationManager for reminders~~
+5. Test sync between iPhone and Mac via CloudKit (requires signing in Xcode)
+
+**Notes:** Using XcodeGen (`project.yml`). Targets: iOS 18+, macOS 15+ (required for `Tab` API). User needs to set Development Team and enable iCloud capability in Xcode before testing sync.
 
 ### Phase 2: Notes
 1. Add MarkdownUI dependency
