@@ -5,6 +5,7 @@ struct TodoListView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \TodoItem.sortOrder) private var todos: [TodoItem]
     @State private var showingAddSheet = false
+    @State private var editingTodo: TodoItem?
 
     private var incompleteTodos: [TodoItem] {
         todos.filter { !$0.isCompleted }
@@ -20,19 +21,34 @@ struct TodoListView: View {
                 Section {
                     ForEach(incompleteTodos) { todo in
                         TodoRowView(todo: todo)
+                            .onTapGesture { editingTodo = todo }
                     }
                     .onDelete { offsets in
                         deleteTodos(from: incompleteTodos, at: offsets)
                     }
+                    .onMove { source, destination in
+                        moveTodos(from: source, to: destination)
+                    }
                 }
 
                 if !completedTodos.isEmpty {
-                    Section("Completed") {
+                    Section {
                         ForEach(completedTodos) { todo in
                             TodoRowView(todo: todo)
+                                .onTapGesture { editingTodo = todo }
                         }
                         .onDelete { offsets in
                             deleteTodos(from: completedTodos, at: offsets)
+                        }
+                    } header: {
+                        HStack {
+                            Text("Completed")
+                            Spacer()
+                            Button("Clear") {
+                                clearCompleted()
+                            }
+                            .font(.caption)
+                            .textCase(nil)
                         }
                     }
                 }
@@ -50,6 +66,9 @@ struct TodoListView: View {
             .sheet(isPresented: $showingAddSheet) {
                 TodoDetailView()
             }
+            .sheet(item: $editingTodo) { todo in
+                TodoDetailView(existingTodo: todo)
+            }
             .overlay {
                 if todos.isEmpty {
                     ContentUnavailableView(
@@ -65,6 +84,23 @@ struct TodoListView: View {
     private func deleteTodos(from list: [TodoItem], at offsets: IndexSet) {
         for index in offsets {
             let todo = list[index]
+            if let notificationID = todo.notificationID {
+                NotificationManager.shared.cancelReminder(id: notificationID)
+            }
+            modelContext.delete(todo)
+        }
+    }
+
+    private func moveTodos(from source: IndexSet, to destination: Int) {
+        var items = incompleteTodos
+        items.move(fromOffsets: source, toOffset: destination)
+        for (index, item) in items.enumerated() {
+            item.sortOrder = index
+        }
+    }
+
+    private func clearCompleted() {
+        for todo in completedTodos {
             if let notificationID = todo.notificationID {
                 NotificationManager.shared.cancelReminder(id: notificationID)
             }

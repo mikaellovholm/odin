@@ -35,7 +35,7 @@ struct TodoDetailView: View {
                 Section {
                     Toggle("Reminder", isOn: $hasReminder.animation())
                     if hasReminder {
-                        DatePicker("When", selection: $reminderDate)
+                        DatePicker("When", selection: $reminderDate, in: Date()...)
                     }
                 }
 
