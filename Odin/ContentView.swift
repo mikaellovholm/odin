@@ -10,8 +10,7 @@ struct ContentView: View {
                 NoteListView()
             }
             Tab("Terminal", systemImage: "terminal") {
-                Text("Terminal — coming soon")
-                    .foregroundStyle(.secondary)
+                TerminalContainerView()
             }
         }
     }

@@ -1,0 +1,160 @@
+import SwiftUI
+
+struct TerminalContainerView: View {
+    @State private var viewModel = TerminalViewModel()
+
+    var body: some View {
+        ZStack {
+            // Terminal always in the hierarchy to preserve state
+            TerminalRepresentable(
+                onTerminalViewCreated: { viewModel.setTerminalView($0) },
+                onDataSend: { viewModel.sendData($0) },
+                onSizeChanged: { viewModel.resizeTerminal(cols: $0, rows: $1) }
+            )
+            .opacity(viewModel.state == .connected ? 1 : 0)
+
+            // Overlay for non-connected states
+            if viewModel.state != .connected {
+                stateOverlay
+            }
+        }
+        .onAppear {
+            if viewModel.state == .idle {
+                viewModel.connect()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var stateOverlay: some View {
+        switch viewModel.state {
+        case .idle, .checkingKey:
+            ProgressView("Checking SSH key...")
+
+        case .setupRequired:
+            setupView
+
+        case .startingVM(let status):
+            VStack(spacing: 16) {
+                ProgressView()
+                    .controlSize(.large)
+                Text(status)
+                    .foregroundStyle(.secondary)
+                Text("Cold start takes 20-40 seconds")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                Button("Cancel") {
+                    viewModel.cancelConnect()
+                }
+                .buttonStyle(.bordered)
+            }
+
+        case .connecting:
+            VStack(spacing: 16) {
+                ProgressView("Connecting via SSH...")
+                Button("Cancel") {
+                    viewModel.cancelConnect()
+                }
+                .buttonStyle(.bordered)
+            }
+
+        case .connected:
+            EmptyView()
+
+        case .disconnected:
+            VStack(spacing: 16) {
+                Image(systemName: "wifi.slash")
+                    .font(.largeTitle)
+                    .foregroundStyle(.secondary)
+                Text("Disconnected")
+                    .font(.headline)
+                Text("tmux session is preserved on the server")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("Reconnect") {
+                    viewModel.connect()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+        case .error(let message):
+            VStack(spacing: 16) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.largeTitle)
+                    .foregroundStyle(.orange)
+                Text("Connection Error")
+                    .font(.headline)
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+                Button("Retry") {
+                    viewModel.connect()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+    }
+
+    private var setupView: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "key")
+                .font(.system(size: 48))
+                .foregroundStyle(.secondary)
+
+            Text("SSH Key Setup")
+                .font(.title2.bold())
+
+            if viewModel.publicKey.isEmpty {
+                Text("Generate an SSH key to connect to the VM.")
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                Button("Generate SSH Key") {
+                    viewModel.generateKey()
+                }
+                .buttonStyle(.borderedProminent)
+            } else {
+                Text("Copy the public key below and add it to GCP:")
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                Text(viewModel.publicKey)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .padding()
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                    .padding(.horizontal)
+
+                Button("Copy to Clipboard") {
+                    copyToClipboard(viewModel.publicKey)
+                }
+
+                Text("Then run:")
+                    .foregroundStyle(.secondary)
+
+                Text("gcloud compute os-login ssh-keys add --key='<paste>'")
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .padding(8)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+
+                Button("Done, Connect") {
+                    viewModel.connect()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding()
+    }
+
+    private func copyToClipboard(_ string: String) {
+        #if os(iOS)
+        UIPasteboard.general.string = string
+        #else
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(string, forType: .string)
+        #endif
+    }
+}

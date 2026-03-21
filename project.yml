@@ -11,6 +11,12 @@ packages:
   MarkdownUI:
     url: https://github.com/gonzalezreal/swift-markdown-ui
     from: "2.4.0"
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm
+    from: "1.12.0"
+  Citadel:
+    url: https://github.com/orlandos-nl/Citadel
+    from: "0.12.0"
 
 targets:
   Odin:
@@ -39,3 +45,5 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - package: MarkdownUI
+      - package: SwiftTerm
+      - package: Citadel
