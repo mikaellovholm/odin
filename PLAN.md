@@ -117,12 +117,18 @@ GCP VM (claude-dev-vm, ephemeral IP from Cloud Function)
 
 ## Build Phases
 
-### Phase 1: Todos (validates full pipeline) — DONE
+### Phase 1: Todos (validates full pipeline) — DONE (UX fixes remaining)
 1. ~~Create Xcode multiplatform project with CloudKit entitlement~~
 2. ~~Define TodoItem model, configure ModelContainer~~
 3. ~~Build TodoListView, TodoRowView, TodoDetailView~~
 4. ~~Implement NotificationManager for reminders~~
 5. Test sync between iPhone and Mac via CloudKit (requires signing in Xcode)
+6. Wire TodoRowView tap to TodoDetailView for editing (currently unreachable)
+7. Add drag-to-reorder (`.onMove`) — sortOrder exists on model but isn't exposed
+8. Add delete confirmation or undo support via `UndoManager`
+9. Constrain reminder DatePicker to future dates (`in: Date()...`)
+10. Add "Clear Completed" button in completed section header
+11. Defer notification permission request to first reminder creation (not app launch)
 
 **Notes:** Using XcodeGen (`project.yml`). Targets: iOS 18+, macOS 15+ (required for `Tab` API). User needs to set Development Team and enable iCloud capability in Xcode before testing sync.
 
@@ -130,8 +136,9 @@ GCP VM (claude-dev-vm, ephemeral IP from Cloud Function)
 1. Add MarkdownUI dependency
 2. Define Note model
 3. Build NoteListView with search + pinning
-4. Build editor/preview with toggle (side-by-side on Mac if wide)
-5. Auto-save with debounce
+4. Build editor/preview with toggle on iPhone; default to side-by-side on Mac (fall back to toggle when window is narrow)
+5. Auto-save with debounce — write directly to SwiftData (not a temp buffer) to avoid data loss on app kill
+6. Add macOS markdown keyboard shortcuts (Cmd+B, Cmd+I, etc.) — plan with the editor, not deferred to Phase 4
 
 ### Phase 3: Terminal
 1. Add SwiftTerm + Citadel dependencies
@@ -140,11 +147,42 @@ GCP VM (claude-dev-vm, ephemeral IP from Cloud Function)
 4. Build platform-specific Representable wrappers
 5. Implement SSHConnectionManager (SSH ↔ SwiftTerm piping)
 6. Build TerminalContainerView (VM start → SSH connect → terminal display)
-7. One-time setup: generate key in app, add public key to GCP via `gcloud compute os-login ssh-keys add`
-8. Test: tap Terminal tab → VM starts → SSH connects → tmux session visible, verify on both platforms
+7. Add VM startup progress UI with estimated wait time and cancel button (cold start takes 20-40s)
+8. Implement reconnection UX: detect SSH drops (network switch, sleep/wake, iOS backgrounding), show disconnected state, auto-reconnect since tmux preserves the session
+9. Add iOS keyboard accessory bar with Ctrl, Tab, Esc, arrow keys — terminal is unusable on iPhone without this
+10. Add font size control (pinch-to-zoom or setting) — especially important on iPhone
+11. One-time setup: generate key in app, add public key to GCP via `gcloud compute os-login ssh-keys add`
+12. Test: tap Terminal tab → VM starts → SSH connects → tmux session visible, verify on both platforms
 
 ### Phase 4: Polish
-- App icon, theming, error handling, macOS keyboard shortcuts, empty states
+- App icon, theming, error handling, macOS keyboard shortcuts
+- Hide unimplemented tabs until their phase is complete (avoid "coming soon" placeholders)
+- CloudKit sync conflict indication — surface merge issues to the user rather than silently dropping edits
+
+## Security
+
+### Cloud Function Authentication
+The VM starter Cloud Function must not be publicly callable. Add authentication so only the Odin app can invoke it:
+- Add IAM `roles/cloudfunctions.invoker` restricted to a service account or use Firebase Auth
+- At minimum, require a secret API key in a request header and validate it in the function
+- Add rate limiting to prevent abuse (e.g., max 5 starts per hour) to cap billing exposure
+
+### SSH Host Key Verification
+With an ephemeral VM IP, standard TOFU (trust-on-first-use) is insufficient:
+- The Cloud Function should return the VM's SSH host key fingerprint alongside the IP
+- The app must verify the host key on connect and reject mismatches
+- This prevents MITM attacks where a spoofed IP is returned
+
+### SSH Key Protection
+Ed25519 keys in Keychain need proper access controls:
+- Use `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` to prevent iCloud Keychain sync of private keys
+- Require biometric auth (Face ID / Touch ID) before releasing the private key via `SecAccessControlCreateWithFlags` with `.biometryCurrentSet`
+- This prevents unauthorized terminal access on a stolen or unlocked device
+
+### Data Sensitivity Boundaries
+- **Keychain only**: SSH private keys (already planned — correct)
+- **SwiftData + CloudKit**: Todos, notes, SSH host configs (hostname, port, username). Acceptable for a personal app, but be aware these sync to any device signed into the same iCloud account
+- **Never persisted**: SSH session data, terminal output
 
 ## Verification
 
