@@ -25,29 +25,29 @@ struct TerminalContainerView: View {
             // Toolbar buttons when connected
             #if os(iOS)
             if viewModel.state == .connected {
-                HStack(spacing: 12) {
+                VStack(spacing: 12) {
                     Button {
                         keyboardDismissed = true
                         viewModel.terminalView?.resignFirstResponder()
                     } label: {
                         Image(systemName: "keyboard.chevron.compact.down")
                             .font(.system(size: 20))
-                            .foregroundStyle(.white.opacity(0.85))
+                            .foregroundStyle(.white)
                             .frame(width: 44, height: 44)
-                            .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+                            .background(Color(red: 0.06, green: 0.11, blue: 0.18), in: RoundedRectangle(cornerRadius: 10))
                     }
                     Button {
                         selectedTab = .todos
                     } label: {
                         Image(systemName: "checklist")
                             .font(.system(size: 20))
-                            .foregroundStyle(.white.opacity(0.85))
+                            .foregroundStyle(.white)
                             .frame(width: 44, height: 44)
-                            .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+                            .background(Color(red: 0.06, green: 0.11, blue: 0.18), in: RoundedRectangle(cornerRadius: 10))
                     }
                 }
                 .padding(.trailing, 12)
-                .safeAreaPadding(.top)
+                .padding(.top, 80)
             }
             #endif
         }
