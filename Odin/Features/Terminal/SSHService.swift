@@ -27,13 +27,17 @@ actor SSHService {
         username: String,
         privateKey: Curve25519.Signing.PrivateKey,
         cols: Int,
-        rows: Int
+        rows: Int,
+        expectedHostKey: String
     ) async throws {
+        let sshKey = try NIOSSHPublicKey(openSSHPublicKey: expectedHostKey)
+        let hostKeyValidator: SSHHostKeyValidator = .trustedKeys([sshKey])
+
         let client = try await SSHClient.connect(
             host: host,
             port: port,
             authenticationMethod: .ed25519(username: username, privateKey: privateKey),
-            hostKeyValidator: .acceptAnything(),
+            hostKeyValidator: hostKeyValidator,
             reconnect: .never
         )
         self.client = client

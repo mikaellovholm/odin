@@ -8,14 +8,23 @@ enum VMStarterService {
     struct VMResponse: Decodable {
         let status: String
         let ip: String
+        let hostKey: String?
     }
 
-    static func startAndWaitForIP() async throws -> String {
+    struct VMResult {
+        let ip: String
+        let hostKey: String
+    }
+
+    static func startAndWaitForIP() async throws -> VMResult {
         let maxAttempts = 20  // 20 × 3s = 60s timeout
         for attempt in 1...maxAttempts {
             let response = try await callFunction()
             if response.status == "running" {
-                return response.ip
+                guard let hostKey = response.hostKey, !hostKey.isEmpty else {
+                    throw VMStarterError.missingHostKey
+                }
+                return VMResult(ip: response.ip, hostKey: hostKey)
             }
             // VM is starting — wait before polling again
             if attempt < maxAttempts {
@@ -28,8 +37,13 @@ enum VMStarterService {
     private static let decoder = JSONDecoder()
 
     private static func callFunction() async throws -> VMResponse {
+        guard let apiKey = APIKeyManager.get() else {
+            throw VMStarterError.missingAPIKey
+        }
         var request = URLRequest(url: endpoint)
+        request.httpMethod = "GET"
         request.timeoutInterval = 30
+        request.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
@@ -41,11 +55,15 @@ enum VMStarterService {
     enum VMStarterError: LocalizedError {
         case httpError(statusCode: Int)
         case timeout
+        case missingAPIKey
+        case missingHostKey
 
         var errorDescription: String? {
             switch self {
             case .httpError(let code): "Cloud Function error (HTTP \(code))"
             case .timeout: "VM did not become ready within 60 seconds"
+            case .missingAPIKey: "API key not configured. Set it in Terminal settings."
+            case .missingHostKey: "VM did not return SSH host key"
             }
         }
     }

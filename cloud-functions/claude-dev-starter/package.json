@@ -1,0 +1,9 @@
+{
+  "name": "claude-dev-starter",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies": {
+    "@google-cloud/compute": "^4.0.0",
+    "@google-cloud/functions-framework": "^3.0.0"
+  }
+}

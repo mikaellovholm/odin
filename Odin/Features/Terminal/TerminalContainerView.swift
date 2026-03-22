@@ -136,55 +136,86 @@ struct TerminalContainerView: View {
     }
 
     private var setupView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "key")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
-
-            Text("SSH Key Setup")
-                .font(.title2.bold())
-
-            if viewModel.publicKey.isEmpty {
-                Text("Generate an SSH key to connect to the VM.")
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-
-                Button("Generate SSH Key") {
-                    viewModel.generateKey()
-                }
-                .buttonStyle(.borderedProminent)
-            } else {
-                Text("Copy the public key below and add it to GCP:")
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-
-                Text(viewModel.publicKey)
-                    .font(.system(.caption, design: .monospaced))
-                    .textSelection(.enabled)
-                    .padding()
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-                    .padding(.horizontal)
-
-                Button("Copy to Clipboard") {
-                    copyToClipboard(viewModel.publicKey)
-                }
-
-                Text("Then run:")
+        ScrollView {
+            VStack(spacing: 20) {
+                Image(systemName: "key")
+                    .font(.system(size: 48))
                     .foregroundStyle(.secondary)
 
-                Text("gcloud compute os-login ssh-keys add --key='<paste>'")
-                    .font(.system(.caption, design: .monospaced))
-                    .textSelection(.enabled)
-                    .padding(8)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                Text("Terminal Setup")
+                    .font(.title2.bold())
 
-                Button("Done, Connect") {
-                    viewModel.connect()
+                // API Key section
+                if !viewModel.hasAPIKey {
+                    Text("Enter the API key for the Cloud Function:")
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+
+                    TextField("API Key", text: $viewModel.apiKeyInput)
+                        .font(.system(.caption, design: .monospaced))
+                        .textFieldStyle(.roundedBorder)
+                        .padding(.horizontal)
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        #endif
+                        .autocorrectionDisabled()
+
+                    Button("Save API Key") {
+                        viewModel.saveAPIKey()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(viewModel.apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-                .buttonStyle(.borderedProminent)
+
+                // SSH Key section
+                else if viewModel.publicKey.isEmpty && !SSHKeyManager.hasKey() {
+                    Text("Generate an SSH key to connect to the VM.")
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+
+                    Button("Generate SSH Key") {
+                        viewModel.generateKey()
+                    }
+                    .buttonStyle(.borderedProminent)
+                } else if !viewModel.publicKey.isEmpty {
+                    Text("Copy the public key below and add it to GCP:")
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+
+                    Text(viewModel.publicKey)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .padding()
+                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                        .padding(.horizontal)
+
+                    Button("Copy to Clipboard") {
+                        copyToClipboard(viewModel.publicKey)
+                    }
+
+                    Text("Then run:")
+                        .foregroundStyle(.secondary)
+
+                    Text("gcloud compute os-login ssh-keys add --key='<paste>'")
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .padding(8)
+                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+
+                    Button("Done, Connect") {
+                        viewModel.connect()
+                    }
+                    .buttonStyle(.borderedProminent)
+                } else {
+                    // Has both API key and SSH key
+                    Button("Connect") {
+                        viewModel.connect()
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
             }
+            .padding()
         }
-        .padding()
     }
 
     private func copyToClipboard(_ string: String) {

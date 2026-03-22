@@ -21,6 +21,7 @@
 		447D8FBD5EB973FF0F00AE95 /* TerminalRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4488F471185361E2945E9C1F /* TerminalRepresentable.swift */; };
 		451E42087B4087C9D410D539 /* TodoItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D0EF2DF0DAD65D91FFC983 /* TodoItem.swift */; };
 		55065753821D21BA00CC927B /* TerminalViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97D0F01C1B9F139409BC1E32 /* TerminalViewModel.swift */; };
+		6412DB92510B6A39F3220CDD /* APIKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0CE0AEF1005A4F699B430A /* APIKeyManager.swift */; };
 		647EFF06B56DCB0731484910 /* NoteDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70070FA6289B0DD9F95EC3B3 /* NoteDetailView.swift */; };
 		7752CCDCF83D879D01E204B5 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = BC8219B3A3216EC7FADEBDC0 /* SwiftTerm */; };
 		78A3083666B041956EE3F71B /* TerminalViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97D0F01C1B9F139409BC1E32 /* TerminalViewModel.swift */; };
@@ -47,6 +48,7 @@
 		DF5A195C9DFA3EB233D979DA /* SSHService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F56CABC3322F385DCCD7F0D1 /* SSHService.swift */; };
 		E4DE9EFF92E33D14112F2890 /* TodoDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 013B2A33FC78BCD8093B473B /* TodoDetailView.swift */; };
 		F2C039551329D017BE0D62D2 /* TerminalRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4488F471185361E2945E9C1F /* TerminalRepresentable.swift */; };
+		F9B36AF3175D3D8A88D84736 /* APIKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0CE0AEF1005A4F699B430A /* APIKeyManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -69,6 +71,7 @@
 		A9AB1AC0BCA301129BACB543 /* NoteListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteListView.swift; sourceTree = "<group>"; };
 		AA9DFA07774A46A8995234BB /* Odin.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Odin.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C6161BB352FD3DE0E060A9E7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		CC0CE0AEF1005A4F699B430A /* APIKeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIKeyManager.swift; sourceTree = "<group>"; };
 		F56CABC3322F385DCCD7F0D1 /* SSHService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHService.swift; sourceTree = "<group>"; };
 		F6E28E0FD277F738E9904ECE /* TerminalContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalContainerView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -160,6 +163,7 @@
 		D62C811C1559231B988C0B7F /* Terminal */ = {
 			isa = PBXGroup;
 			children = (
+				CC0CE0AEF1005A4F699B430A /* APIKeyManager.swift */,
 				8A9523CE395F3BC2839A1043 /* SSHKeyManager.swift */,
 				F56CABC3322F385DCCD7F0D1 /* SSHService.swift */,
 				F6E28E0FD277F738E9904ECE /* TerminalContainerView.swift */,
@@ -239,10 +243,6 @@
 					90DF0826675661693392DF54 = {
 						ProvisioningStyle = Automatic;
 					};
-					B881169EF3F323D58A53E45D = {
-						DevelopmentTeam = "";
-						ProvisioningStyle = Automatic;
-					};
 				};
 			};
 			buildConfigurationList = 580E15A80F3362B84EE8DE41 /* Build configuration list for PBXProject "Odin" */;
@@ -294,6 +294,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F9B36AF3175D3D8A88D84736 /* APIKeyManager.swift in Sources */,
 				3143C3771A9157A6E48C615A /* ContentView.swift in Sources */,
 				3EEF1BD067B06293E62A79C8 /* Note.swift in Sources */,
 				647EFF06B56DCB0731484910 /* NoteDetailView.swift in Sources */,
@@ -317,6 +318,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6412DB92510B6A39F3220CDD /* APIKeyManager.swift in Sources */,
 				C46E7F1D09BB655C578A9E92 /* ContentView.swift in Sources */,
 				8BA2B94816A92DDB3F4AC5D1 /* Note.swift in Sources */,
 				BB2217C332EEA41E899D8C81 /* NoteDetailView.swift in Sources */,
@@ -513,11 +515,11 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Odin/Odin.entitlements;
-				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = APN2E86BRE;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Odin/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -527,6 +529,7 @@
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mikaellovholm.odin;
 				PRODUCT_NAME = Odin;
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.9;
 			};
@@ -537,11 +540,11 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Odin/Odin.entitlements;
-				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = APN2E86BRE;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Odin/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -551,6 +554,7 @@
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mikaellovholm.odin;
 				PRODUCT_NAME = Odin;
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.9;
 			};
