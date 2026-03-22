@@ -7,6 +7,7 @@ struct TerminalRepresentable: UIViewRepresentable {
     var onDataSend: (ArraySlice<UInt8>) -> Void
     var onSizeChanged: (Int, Int) -> Void
     var isConnected: Bool
+    @Binding var keyboardDismissed: Bool
 
     func makeUIView(context: Context) -> OdinTerminalView {
         let tv = OdinTerminalView(frame: .zero)
@@ -16,13 +17,14 @@ struct TerminalRepresentable: UIViewRepresentable {
         tv.backgroundColor = .black
         tv.isOpaque = true
         tv.font = UIFont.monospacedSystemFont(ofSize: 10, weight: .regular)
+        tv.onTapped = { keyboardDismissed = false }
         context.coordinator.terminalView = tv
         onTerminalViewCreated(tv)
         return tv
     }
 
     func updateUIView(_ uiView: OdinTerminalView, context: Context) {
-        if isConnected && !uiView.isFirstResponder {
+        if isConnected && !keyboardDismissed && !uiView.isFirstResponder {
             uiView.becomeFirstResponder()
         }
     }
@@ -41,6 +43,7 @@ class OdinTerminalView: TerminalView, UIGestureRecognizerDelegate {
     private var scrollAccumulator: CGFloat = 0
     private let pixelsPerScrollLine: CGFloat = 20
     private var wheelGesture: UIPanGestureRecognizer?
+    var onTapped: (() -> Void)?
 
     /// Ensure standard keyboard every time focus is acquired
     override func becomeFirstResponder() -> Bool {
@@ -52,6 +55,8 @@ class OdinTerminalView: TerminalView, UIGestureRecognizerDelegate {
         super.didMoveToSuperview()
         guard wheelGesture == nil, superview != nil else { return }
         inputView = nil
+        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
+        addGestureRecognizer(tap)
         let gesture = UIPanGestureRecognizer(target: self, action: #selector(handleWheelPan(_:)))
         gesture.delegate = self
         wheelGesture = gesture
@@ -82,6 +87,11 @@ class OdinTerminalView: TerminalView, UIGestureRecognizerDelegate {
         gestureRecognizer === wheelGesture
     }
 
+    @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
+        onTapped?()
+        becomeFirstResponder()
+    }
+
     @objc private func handleWheelPan(_ gesture: UIPanGestureRecognizer) {
         guard getTerminal().mouseMode != .off else { return }
 
@@ -95,12 +105,12 @@ class OdinTerminalView: TerminalView, UIGestureRecognizerDelegate {
 
             while abs(scrollAccumulator) >= pixelsPerScrollLine {
                 if scrollAccumulator < 0 {
-                    // Swipe up → scroll up (button 64)
-                    sendWheelEvent(button: 64)
+                    // Swipe up → scroll down (natural scrolling)
+                    sendWheelEvent(button: 65)
                     scrollAccumulator += pixelsPerScrollLine
                 } else {
-                    // Swipe down → scroll down (button 65)
-                    sendWheelEvent(button: 65)
+                    // Swipe down → scroll up (natural scrolling)
+                    sendWheelEvent(button: 64)
                     scrollAccumulator -= pixelsPerScrollLine
                 }
             }
@@ -123,6 +133,7 @@ struct TerminalRepresentable: NSViewRepresentable {
     var onDataSend: (ArraySlice<UInt8>) -> Void
     var onSizeChanged: (Int, Int) -> Void
     var isConnected: Bool
+    @Binding var keyboardDismissed: Bool
 
     func makeNSView(context: Context) -> TerminalView {
         let tv = TerminalView(frame: .zero)

@@ -1,8 +1,9 @@
 import SwiftUI
 
 struct TerminalContainerView: View {
+    @Binding var selectedTab: AppTab
     @State private var viewModel = TerminalViewModel()
-    @State private var showTabBar = false
+    @State private var keyboardDismissed = false
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -11,7 +12,8 @@ struct TerminalContainerView: View {
                 onTerminalViewCreated: { viewModel.setTerminalView($0) },
                 onDataSend: { viewModel.sendData($0) },
                 onSizeChanged: { viewModel.resizeTerminal(cols: $0, rows: $1) },
-                isConnected: viewModel.state == .connected
+                isConnected: viewModel.state == .connected,
+                keyboardDismissed: $keyboardDismissed
             )
             .opacity(viewModel.state == .connected ? 1 : 0)
 
@@ -23,35 +25,36 @@ struct TerminalContainerView: View {
             // Toolbar buttons when connected
             #if os(iOS)
             if viewModel.state == .connected {
-                HStack(spacing: 8) {
+                HStack(spacing: 12) {
                     Button {
-                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        keyboardDismissed = true
+                        viewModel.terminalView?.resignFirstResponder()
                     } label: {
                         Image(systemName: "keyboard.chevron.compact.down")
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.7))
-                            .padding(8)
-                            .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+                            .font(.system(size: 20))
+                            .foregroundStyle(.white.opacity(0.85))
+                            .frame(width: 44, height: 44)
+                            .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
                     }
                     Button {
-                        withAnimation { showTabBar.toggle() }
+                        selectedTab = .todos
                     } label: {
-                        Image(systemName: showTabBar ? "rectangle.bottomhalf.inset.filled" : "rectangle.bottomhalf.filled")
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.7))
-                            .padding(8)
-                            .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+                        Image(systemName: "checklist")
+                            .font(.system(size: 20))
+                            .foregroundStyle(.white.opacity(0.85))
+                            .frame(width: 44, height: 44)
+                            .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
                     }
                 }
-                .padding(.top, 4)
-                .padding(.trailing, 8)
+                .padding(.trailing, 12)
+                .safeAreaPadding(.top)
             }
             #endif
         }
         .ignoresSafeArea(.container)
         .background(.black)
         #if os(iOS)
-        .toolbar(viewModel.state == .connected && !showTabBar ? .hidden : .visible, for: .tabBar)
+        .toolbar(viewModel.state == .connected ? .hidden : .visible, for: .tabBar)
         #endif
         .onAppear {
             if viewModel.state == .idle {
