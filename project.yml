@@ -43,6 +43,7 @@ targets:
         DEVELOPMENT_TEAM: ""
         CODE_SIGN_IDENTITY: "-"
         GENERATE_INFOPLIST_FILE: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     dependencies:
       - package: MarkdownUI
       - package: SwiftTerm
