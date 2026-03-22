@@ -64,7 +64,7 @@
 		97D0F01C1B9F139409BC1E32 /* TerminalViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalViewModel.swift; sourceTree = "<group>"; };
 		A4C3DA7C31C0AC6984C930CC /* VMStarterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VMStarterService.swift; sourceTree = "<group>"; };
 		A9AB1AC0BCA301129BACB543 /* NoteListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteListView.swift; sourceTree = "<group>"; };
-		AA9DFA07774A46A8995234BB /* Odin.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Odin.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA9DFA07774A46A8995234BB /* Odin.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Odin.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C6161BB352FD3DE0E060A9E7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		F56CABC3322F385DCCD7F0D1 /* SSHService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHService.swift; sourceTree = "<group>"; };
 		F6E28E0FD277F738E9904ECE /* TerminalContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalContainerView.swift; sourceTree = "<group>"; };
@@ -231,7 +231,6 @@
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					90DF0826675661693392DF54 = {
-						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
 					B881169EF3F323D58A53E45D = {
@@ -321,9 +320,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Odin/Odin.entitlements;
 				CODE_SIGN_IDENTITY = "-";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = APN2E86BRE;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Odin/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -464,9 +464,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Odin/Odin.entitlements;
 				CODE_SIGN_IDENTITY = "-";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = APN2E86BRE;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Odin/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

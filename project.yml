@@ -28,6 +28,7 @@ targets:
       path: Odin/Info.plist
       properties:
         CFBundleDisplayName: Odin
+        UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft

@@ -2,9 +2,10 @@ import SwiftUI
 
 struct TerminalContainerView: View {
     @State private var viewModel = TerminalViewModel()
+    @State private var showTabBar = false
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .topTrailing) {
             // Terminal always in the hierarchy to preserve state
             TerminalRepresentable(
                 onTerminalViewCreated: { viewModel.setTerminalView($0) },
@@ -18,11 +19,39 @@ struct TerminalContainerView: View {
             if viewModel.state != .connected {
                 stateOverlay
             }
+
+            // Toolbar buttons when connected
+            #if os(iOS)
+            if viewModel.state == .connected {
+                HStack(spacing: 8) {
+                    Button {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    } label: {
+                        Image(systemName: "keyboard.chevron.compact.down")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.7))
+                            .padding(8)
+                            .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+                    }
+                    Button {
+                        withAnimation { showTabBar.toggle() }
+                    } label: {
+                        Image(systemName: showTabBar ? "rectangle.bottomhalf.inset.filled" : "rectangle.bottomhalf.filled")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.7))
+                            .padding(8)
+                            .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+                .padding(.top, 4)
+                .padding(.trailing, 8)
+            }
+            #endif
         }
         .ignoresSafeArea(.container)
         .background(.black)
         #if os(iOS)
-        .toolbar(viewModel.state == .connected ? .hidden : .visible, for: .tabBar)
+        .toolbar(viewModel.state == .connected && !showTabBar ? .hidden : .visible, for: .tabBar)
         #endif
         .onAppear {
             if viewModel.state == .idle {

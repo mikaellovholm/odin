@@ -42,10 +42,15 @@ class OdinTerminalView: TerminalView, UIGestureRecognizerDelegate {
     private let pixelsPerScrollLine: CGFloat = 20
     private var wheelGesture: UIPanGestureRecognizer?
 
+    /// Ensure standard keyboard every time focus is acquired
+    override func becomeFirstResponder() -> Bool {
+        inputView = nil
+        return super.becomeFirstResponder()
+    }
+
     override func didMoveToSuperview() {
         super.didMoveToSuperview()
         guard wheelGesture == nil, superview != nil else { return }
-        // Force standard iOS keyboard — clear SwiftTerm's custom KeyboardView
         inputView = nil
         let gesture = UIPanGestureRecognizer(target: self, action: #selector(handleWheelPan(_:)))
         gesture.delegate = self
