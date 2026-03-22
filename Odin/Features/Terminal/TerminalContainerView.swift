@@ -19,7 +19,7 @@ struct TerminalContainerView: View {
                 stateOverlay
             }
         }
-        .ignoresSafeArea(.all)
+        .ignoresSafeArea(.container)
         .background(.black)
         #if os(iOS)
         .toolbar(viewModel.state == .connected ? .hidden : .visible, for: .tabBar)

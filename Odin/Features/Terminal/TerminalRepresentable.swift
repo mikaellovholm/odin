@@ -15,7 +15,6 @@ struct TerminalRepresentable: UIViewRepresentable {
         tv.nativeForegroundColor = .white
         tv.backgroundColor = .black
         tv.isOpaque = true
-        tv.contentInsetAdjustmentBehavior = .never
         tv.font = UIFont.monospacedSystemFont(ofSize: 10, weight: .regular)
         context.coordinator.terminalView = tv
         onTerminalViewCreated(tv)
