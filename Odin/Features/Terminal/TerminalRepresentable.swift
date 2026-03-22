@@ -6,34 +6,68 @@ struct TerminalRepresentable: UIViewRepresentable {
     var onTerminalViewCreated: (TerminalView) -> Void
     var onDataSend: (ArraySlice<UInt8>) -> Void
     var onSizeChanged: (Int, Int) -> Void
+    var isConnected: Bool
 
-    func makeUIView(context: Context) -> TerminalView {
-        let tv = TerminalView(frame: .zero)
+    func makeUIView(context: Context) -> OdinTerminalView {
+        let tv = OdinTerminalView(frame: .zero)
         tv.terminalDelegate = context.coordinator
+        tv.nativeBackgroundColor = .black
+        tv.nativeForegroundColor = .white
+        tv.backgroundColor = .black
+        tv.isOpaque = true
+        tv.contentInsetAdjustmentBehavior = .never
+        tv.font = UIFont.monospacedSystemFont(ofSize: 14, weight: .regular)
+        context.coordinator.terminalView = tv
         onTerminalViewCreated(tv)
         return tv
     }
 
-    func updateUIView(_ uiView: TerminalView, context: Context) {}
+    func updateUIView(_ uiView: OdinTerminalView, context: Context) {
+        if isConnected && !uiView.isFirstResponder {
+            uiView.becomeFirstResponder()
+        }
+    }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onDataSend: onDataSend, onSizeChanged: onSizeChanged)
     }
 }
+
+/// Subclass to detect layout changes and update terminal grid size
+class OdinTerminalView: TerminalView {
+    private var lastAppliedSize: CGSize = .zero
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let newSize = bounds.size
+        if newSize != lastAppliedSize && newSize.width > 0 && newSize.height > 0 {
+            lastAppliedSize = newSize
+        }
+    }
+}
+
 #else
 struct TerminalRepresentable: NSViewRepresentable {
     var onTerminalViewCreated: (TerminalView) -> Void
     var onDataSend: (ArraySlice<UInt8>) -> Void
     var onSizeChanged: (Int, Int) -> Void
+    var isConnected: Bool
 
     func makeNSView(context: Context) -> TerminalView {
         let tv = TerminalView(frame: .zero)
         tv.terminalDelegate = context.coordinator
+        tv.nativeBackgroundColor = .black
+        tv.nativeForegroundColor = .white
+        context.coordinator.terminalView = tv
         onTerminalViewCreated(tv)
         return tv
     }
 
-    func updateNSView(_ nsView: TerminalView, context: Context) {}
+    func updateNSView(_ nsView: TerminalView, context: Context) {
+        if isConnected {
+            nsView.window?.makeFirstResponder(nsView)
+        }
+    }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onDataSend: onDataSend, onSizeChanged: onSizeChanged)
@@ -45,6 +79,7 @@ extension TerminalRepresentable {
     class Coordinator: NSObject, TerminalViewDelegate {
         let onDataSend: (ArraySlice<UInt8>) -> Void
         let onSizeChanged: (Int, Int) -> Void
+        weak var terminalView: TerminalView?
 
         init(onDataSend: @escaping (ArraySlice<UInt8>) -> Void,
              onSizeChanged: @escaping (Int, Int) -> Void) {

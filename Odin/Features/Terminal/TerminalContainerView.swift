@@ -9,7 +9,8 @@ struct TerminalContainerView: View {
             TerminalRepresentable(
                 onTerminalViewCreated: { viewModel.setTerminalView($0) },
                 onDataSend: { viewModel.sendData($0) },
-                onSizeChanged: { viewModel.resizeTerminal(cols: $0, rows: $1) }
+                onSizeChanged: { viewModel.resizeTerminal(cols: $0, rows: $1) },
+                isConnected: viewModel.state == .connected
             )
             .opacity(viewModel.state == .connected ? 1 : 0)
 
@@ -18,6 +19,7 @@ struct TerminalContainerView: View {
                 stateOverlay
             }
         }
+        .background(.black)
         .onAppear {
             if viewModel.state == .idle {
                 viewModel.connect()

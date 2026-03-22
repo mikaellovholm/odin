@@ -31,7 +31,7 @@ final class TerminalViewModel {
             await sshService.setCallbacks(
                 onDataReceived: { [weak self] bytes in
                     Task { @MainActor in
-                        self?.terminalView?.getTerminal().feed(byteArray: bytes)
+                        self?.terminalView?.feed(byteArray: bytes[...])
                     }
                 },
                 onDisconnected: { [weak self] in
