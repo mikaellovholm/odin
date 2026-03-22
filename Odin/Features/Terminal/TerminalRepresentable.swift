@@ -16,7 +16,7 @@ struct TerminalRepresentable: UIViewRepresentable {
         tv.backgroundColor = .black
         tv.isOpaque = true
         tv.contentInsetAdjustmentBehavior = .never
-        tv.font = UIFont.monospacedSystemFont(ofSize: 14, weight: .regular)
+        tv.font = UIFont.monospacedSystemFont(ofSize: 10, weight: .regular)
         context.coordinator.terminalView = tv
         onTerminalViewCreated(tv)
         return tv
@@ -46,6 +46,8 @@ class OdinTerminalView: TerminalView, UIGestureRecognizerDelegate {
     override func didMoveToSuperview() {
         super.didMoveToSuperview()
         guard wheelGesture == nil, superview != nil else { return }
+        // Force standard iOS keyboard — clear SwiftTerm's custom KeyboardView
+        inputView = nil
         let gesture = UIPanGestureRecognizer(target: self, action: #selector(handleWheelPan(_:)))
         gesture.delegate = self
         wheelGesture = gesture
