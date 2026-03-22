@@ -44,6 +44,15 @@ class OdinTerminalView: TerminalView {
             lastAppliedSize = newSize
         }
     }
+
+    /// When mouse reporting is active (e.g. tmux mouse mode), disable UIScrollView's
+    /// native pan gesture so the terminal's mouse pan gesture receives touch events instead.
+    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        if getTerminal().mouseMode != .off && gestureRecognizer === panGestureRecognizer {
+            return false
+        }
+        return super.gestureRecognizerShouldBegin(gestureRecognizer)
+    }
 }
 
 #else
