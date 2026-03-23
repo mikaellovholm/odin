@@ -32,7 +32,7 @@ There are no tests, linter, or formatter configured.
 `ContentView.swift` uses a `TabView` with `AppTab` enum (`todos`, `notes`, `terminal`). A `@State` binding controls the selected tab. The Terminal view receives a `$selectedTab` binding to navigate back to Todos programmatically (since the tab bar is hidden when connected).
 
 ### Feature Modules
-Each feature lives in `Odin/Features/<Name>/` with its own views and services. Models live in `Odin/Models/`. All three phases are implemented: Todos (Phase 1), Notes (Phase 2), Terminal/SSH (Phase 3). See `PLAN.md` for full details.
+Each feature lives in `Odin/Features/<Name>/` with its own views and services. Models live in `Odin/Models/`. Todos (Phase 1) and Notes (Phase 2) are complete. Terminal/SSH (Phase 3) core flow works but is missing: iOS keyboard accessory bar, font size control, and auto-reconnect. See `PLAN.md` for full details.
 
 ### Key Patterns
 - `@Query` for reactive SwiftData fetching in list views
@@ -45,12 +45,12 @@ Uses SwiftTerm (terminal emulation) + Citadel (SSH) to connect to a GCP VM. Key 
 
 - **TerminalContainerView** — orchestrates connection flow, overlay buttons (keyboard dismiss, navigate to Todos)
 - **TerminalRepresentable** — `UIViewRepresentable`/`NSViewRepresentable` wrapping SwiftTerm's `TerminalView`
-- **TerminalViewModel** — state machine (idle → checkingKey → startingVM → connecting → connected)
+- **TerminalViewModel** — `@Observable` state machine (idle → checkingKey → setupRequired → startingVM → connecting → connected → disconnected → error)
 - **VMStarterService** — calls Cloud Function to start VM and get IP + SSH host key. Authenticates via `X-API-Key` header. Refuses to connect if host key is missing.
 - **SSHService** — Citadel SSH client with Ed25519 auth and mandatory host key verification via `.trustedKeys()`. The full OpenSSH key string (e.g. `ssh-ed25519 AAAA...`) is passed from the Cloud Function response.
 - **SSHKeyManager** — Ed25519 key generation and Keychain storage (`kSecAttrAccessibleWhenUnlockedThisDeviceOnly`)
 - **APIKeyManager** — Stores the Cloud Function API key in Keychain. No secrets in source code. The setup screen prompts for the key on first use.
-- **OdinTerminalView** — subclass adding mouse wheel (tmux scroll) and tap gesture support on iOS
+- **OdinTerminalView** — iOS subclass of `TerminalView` adding mouse wheel events (SGR escape sequences for tmux scroll), tap-to-focus gesture, and UIScrollView pan blocking when mouse mode is active
 
 ### Cloud Function
 Source lives in `cloud-functions/claude-dev-starter/`. Node.js function deployed to GCP (`europe-north1`).
