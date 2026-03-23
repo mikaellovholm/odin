@@ -2,6 +2,9 @@ import SwiftUI
 
 enum AppTab: Hashable {
     case todos, notes, terminal
+    #if os(macOS)
+    case claude
+    #endif
 }
 
 struct ContentView: View {
@@ -18,6 +21,11 @@ struct ContentView: View {
             Tab("Terminal", systemImage: "terminal", value: .terminal) {
                 TerminalContainerView(selectedTab: $selectedTab)
             }
+            #if os(macOS)
+            Tab("Claude", systemImage: "brain", value: .claude) {
+                ClaudeTerminalContainerView()
+            }
+            #endif
         }
     }
 }
