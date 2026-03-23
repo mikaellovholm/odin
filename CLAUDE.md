@@ -29,10 +29,10 @@ There are no tests, linter, or formatter configured.
 - `ModelContainer` is set up in `OdinApp.swift` and injected via SwiftUI environment.
 
 ### Navigation
-`ContentView.swift` uses a `TabView` with `AppTab` enum (`todos`, `notes`, `terminal`). A `@State` binding controls the selected tab. The Terminal view receives a `$selectedTab` binding to navigate back to Todos programmatically (since the tab bar is hidden when connected).
+`ContentView.swift` uses a `TabView` with `AppTab` enum (`todos`, `notes`, `terminal`, and `claude` on macOS). A `@State` binding controls the selected tab. The Terminal view receives a `$selectedTab` binding to navigate back to Todos programmatically (since the tab bar is hidden when connected).
 
 ### Feature Modules
-Each feature lives in `Odin/Features/<Name>/` with its own views and services. Models live in `Odin/Models/`. Todos (Phase 1) and Notes (Phase 2) are complete. Terminal/SSH (Phase 3) core flow works but is missing: iOS keyboard accessory bar, font size control, and auto-reconnect. See `PLAN.md` for full details.
+Each feature lives in `Odin/Features/<Name>/` with its own views and services. Models live in `Odin/Models/`. Todos (Phase 1) and Notes (Phase 2) are complete. Terminal/SSH (Phase 3) core flow works but is missing: iOS keyboard accessory bar, font size control, and auto-reconnect. Claude Terminal (macOS-only) launches Claude Code CLI in a local terminal. See `PLAN.md` for full details.
 
 ### Key Patterns
 - `@Query` for reactive SwiftData fetching in list views
@@ -51,6 +51,13 @@ Uses SwiftTerm (terminal emulation) + Citadel (SSH) to connect to a GCP VM. Key 
 - **SSHKeyManager** — Ed25519 key generation and Keychain storage (`kSecAttrAccessibleWhenUnlockedThisDeviceOnly`)
 - **APIKeyManager** — Stores the Cloud Function API key in Keychain. No secrets in source code. The setup screen prompts for the key on first use.
 - **OdinTerminalView** — iOS subclass of `TerminalView` adding mouse wheel events (SGR escape sequences for tmux scroll), tap-to-focus gesture, and UIScrollView pan blocking when mouse mode is active
+
+### Claude Terminal Feature (macOS only)
+Uses SwiftTerm's `LocalProcess` to spawn the Claude Code CLI in a local PTY — no SSH or Cloud Function needed. Lives in `Odin/Features/Claude/`. Guarded by `#if os(macOS)` so iOS compilation is unaffected.
+
+- **ClaudeTerminalContainerView** — SwiftUI view reusing `TerminalRepresentable`. Shows progress spinner while starting, terminal when running, restart/retry overlays on exit/error.
+- **LocalTerminalViewModel** — `@Observable` state machine (starting → running → exited → error). Resolves the `claude` binary path (checks `/usr/local/bin`, `/opt/homebrew/bin`, `~/.local/bin`, then falls back to `which claude` via login shell). Spawns the process with `TERM=xterm-256color` and `COLORTERM=truecolor`. Handles terminal resize via `TIOCSWINSZ` ioctl on the PTY.
+- **ProcessBridge** — `@MainActor` adapter conforming to `LocalProcessDelegate`. Bridges process callbacks (data received, terminated, window size) to the view model via closures. All callbacks dispatched on the main queue.
 
 ### Cloud Function
 Source lives in `cloud-functions/claude-dev-starter/`. Node.js function deployed to GCP (`europe-north1`).
@@ -78,3 +85,5 @@ The function validates an `X-API-Key` header (secret stored in `API_KEY` env var
 - `UILaunchScreen: {}` in `project.yml` is required — without it iOS runs in compatibility zoom mode
 - Code signing requires manually setting Development Team in Xcode; CloudKit sync requires the iCloud capability enabled
 - Terminal tab bar is hidden when connected on iOS; overlay buttons provide keyboard dismiss and tab navigation
+- The Claude tab is macOS-only (`#if os(macOS)` on both the `AppTab.claude` enum case and the `Tab` in `ContentView`). New files in `Odin/Features/Claude/` are fully wrapped in `#if os(macOS)` so they compile to nothing on iOS.
+- Claude terminal requires the `claude` CLI installed on the Mac (e.g. via `npm install -g @anthropic-ai/claude-code`). The app is not sandboxed, so spawning local processes works.

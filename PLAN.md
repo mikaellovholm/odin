@@ -62,6 +62,10 @@ odin/
         SSHService.swift             -- Actor: Citadel SSH client, PTY, host key verification
         SSHKeyManager.swift          -- Ed25519 key gen + Keychain storage
         APIKeyManager.swift          -- Cloud Function API key in Keychain
+
+      Claude/                          -- macOS only (#if os(macOS))
+        ClaudeTerminalContainerView.swift -- SwiftUI view, reuses TerminalRepresentable
+        LocalTerminalViewModel.swift     -- Spawns claude CLI via LocalProcess + PTY
 ```
 
 ## Dependencies (3 external packages)
@@ -161,6 +165,16 @@ GCP VM (claude-dev-vm, ephemeral IP from Cloud Function)
 **Also implemented (not originally planned):**
 - APIKeyManager — Cloud Function API key stored in Keychain, setup screen prompts on first use
 - Tab bar hidden when connected on iOS; overlay buttons for keyboard dismiss and navigate to Todos
+
+### Phase 3b: Claude Terminal (macOS only) — DONE
+1. ~~Add `AppTab.claude` case and "Claude" tab in ContentView (macOS-only via `#if os(macOS)`)~~
+2. ~~Implement LocalTerminalViewModel — resolves claude CLI path, spawns via SwiftTerm's LocalProcess with PTY~~
+3. ~~Implement ProcessBridge — LocalProcessDelegate adapter bridging callbacks to view model~~
+4. ~~Build ClaudeTerminalContainerView — reuses TerminalRepresentable, state overlays for starting/exited/error~~
+5. ~~Set environment: TERM=xterm-256color, COLORTERM=truecolor, LANG=en_US.UTF-8~~
+6. ~~Handle terminal resize via TIOCSWINSZ ioctl on master PTY fd~~
+
+**Notes:** Requires `claude` CLI installed on the Mac. No SSH, Cloud Function, or API key needed — purely local. Files wrapped in `#if os(macOS)`, iOS compilation unaffected.
 
 ### Phase 4: Polish
 - ~~App icon~~ (Norse god + ravens design)
