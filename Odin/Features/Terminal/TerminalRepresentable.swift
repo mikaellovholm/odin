@@ -7,6 +7,7 @@ struct TerminalRepresentable: UIViewRepresentable {
     var onDataSend: (ArraySlice<UInt8>) -> Void
     var onSizeChanged: (Int, Int) -> Void
     var onTitleChanged: ((String) -> Void)?
+    var fontSize: CGFloat = 10
     var isConnected: Bool
     @Binding var keyboardDismissed: Bool
 
@@ -17,7 +18,7 @@ struct TerminalRepresentable: UIViewRepresentable {
         tv.nativeForegroundColor = .white
         tv.backgroundColor = .black
         tv.isOpaque = true
-        tv.font = UIFont.monospacedSystemFont(ofSize: 10, weight: .regular)
+        tv.font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         tv.onTapped = { keyboardDismissed = false }
         context.coordinator.terminalView = tv
         onTerminalViewCreated(tv)
@@ -27,6 +28,10 @@ struct TerminalRepresentable: UIViewRepresentable {
     func updateUIView(_ uiView: OdinTerminalView, context: Context) {
         if isConnected && !keyboardDismissed && !uiView.isFirstResponder {
             uiView.becomeFirstResponder()
+        }
+        let targetFont = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        if uiView.font?.pointSize != fontSize {
+            uiView.font = targetFont
         }
     }
 

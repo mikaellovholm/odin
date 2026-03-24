@@ -4,14 +4,20 @@ struct TerminalContainerView: View {
     @Binding var selectedTab: AppTab
     @State private var viewModel = TerminalViewModel()
     @State private var keyboardDismissed = false
+    #if os(iOS)
+    @State private var keyboardVisible = false
+    #endif
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        ZStack {
             // Terminal always in the hierarchy to preserve state
             TerminalRepresentable(
                 onTerminalViewCreated: { viewModel.setTerminalView($0) },
                 onDataSend: { viewModel.sendData($0) },
                 onSizeChanged: { viewModel.resizeTerminal(cols: $0, rows: $1) },
+                #if os(iOS)
+                fontSize: keyboardVisible ? 11 : 10,
+                #endif
                 isConnected: viewModel.state == .connected,
                 keyboardDismissed: $keyboardDismissed
             )
@@ -22,9 +28,9 @@ struct TerminalContainerView: View {
                 stateOverlay
             }
 
-            // Toolbar buttons when connected
             #if os(iOS)
             if viewModel.state == .connected {
+                // Top-right toolbar buttons
                 VStack(spacing: 12) {
                     Button {
                         keyboardDismissed = true
@@ -46,8 +52,33 @@ struct TerminalContainerView: View {
                             .background(Color(red: 0.06, green: 0.11, blue: 0.18), in: RoundedRectangle(cornerRadius: 10))
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                 .padding(.trailing, 12)
                 .padding(.top, 80)
+
+                // Bottom-center quick buttons
+                HStack(spacing: 16) {
+                    Button {
+                        viewModel.sendData(ArraySlice("1".utf8))
+                    } label: {
+                        Text("1")
+                            .font(.system(size: 18, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(Color(red: 0.06, green: 0.11, blue: 0.18), in: RoundedRectangle(cornerRadius: 10))
+                    }
+                    Button {
+                        viewModel.sendData(ArraySlice("2".utf8))
+                    } label: {
+                        Text("2")
+                            .font(.system(size: 18, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(Color(red: 0.06, green: 0.11, blue: 0.18), in: RoundedRectangle(cornerRadius: 10))
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .padding(.bottom, 12)
             }
             #endif
         }
@@ -55,6 +86,14 @@ struct TerminalContainerView: View {
         .background(.black)
         #if os(iOS)
         .toolbar(viewModel.state == .connected ? .hidden : .visible, for: .tabBar)
+        #endif
+        #if os(iOS)
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            keyboardVisible = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardVisible = false
+        }
         #endif
         .onAppear {
             if viewModel.state == .idle {
