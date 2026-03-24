@@ -2,8 +2,9 @@
 import SwiftUI
 
 struct ClaudeTerminalContainerView: View {
-    @State private var viewModel = LocalTerminalViewModel()
+    @Bindable var viewModel: LocalTerminalViewModel
     @State private var keyboardDismissed = false
+    @State private var needsDirectorySelection = true
 
     var body: some View {
         ZStack {
@@ -16,15 +17,50 @@ struct ClaudeTerminalContainerView: View {
             )
             .opacity(viewModel.state == .running ? 1 : 0)
 
-            if viewModel.state != .running {
+            if needsDirectorySelection {
+                directoryPicker
+            } else if viewModel.state != .running {
                 stateOverlay
             }
         }
         .background(.black)
         .ignoresSafeArea(.container)
-        .onAppear {
-            if viewModel.state == .starting {
-                viewModel.startClaude()
+    }
+
+    private var directoryPicker: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "folder")
+                .font(.system(size: 48))
+                .foregroundStyle(.secondary)
+
+            Text("Working Directory")
+                .font(.title2.bold())
+
+            Text(viewModel.workingDirectory)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .padding(.horizontal)
+
+            HStack(spacing: 12) {
+                Button("Choose Folder...") {
+                    let panel = NSOpenPanel()
+                    panel.canChooseFiles = false
+                    panel.canChooseDirectories = true
+                    panel.allowsMultipleSelection = false
+                    panel.directoryURL = URL(fileURLWithPath: viewModel.workingDirectory)
+                    if panel.runModal() == .OK, let url = panel.url {
+                        viewModel.workingDirectory = url.path
+                    }
+                }
+                .buttonStyle(.bordered)
+
+                Button("Start Claude") {
+                    needsDirectorySelection = false
+                    viewModel.startClaude()
+                }
+                .buttonStyle(.borderedProminent)
             }
         }
     }
@@ -51,6 +87,7 @@ struct ClaudeTerminalContainerView: View {
                         .foregroundStyle(.secondary)
                 }
                 Button("Restart") {
+                    needsDirectorySelection = true
                     viewModel.restart()
                 }
                 .buttonStyle(.borderedProminent)
@@ -69,6 +106,7 @@ struct ClaudeTerminalContainerView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
                 Button("Retry") {
+                    needsDirectorySelection = true
                     viewModel.restart()
                 }
                 .buttonStyle(.borderedProminent)

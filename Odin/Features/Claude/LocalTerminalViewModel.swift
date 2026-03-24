@@ -13,8 +13,11 @@ final class LocalTerminalViewModel {
     }
 
     var state: State = .starting
+    var workingDirectory: String = NSHomeDirectory()
+    var isActive: Bool = false
 
     private var process: LocalProcess?
+    private var activityTimer: Task<Void, Never>?
     private var bridge: ProcessBridge?
     private(set) weak var terminalView: TerminalView?
 
@@ -31,6 +34,7 @@ final class LocalTerminalViewModel {
         let bridge = ProcessBridge(
             onData: { [weak self] slice in
                 self?.terminalView?.feed(byteArray: slice)
+                self?.markActive()
             },
             onTerminated: { [weak self] exitCode in
                 self?.state = .exited(code: exitCode)
@@ -57,7 +61,8 @@ final class LocalTerminalViewModel {
             executable: claudePath,
             args: [],
             environment: Self.buildEnvironment(),
-            execName: nil
+            execName: nil,
+            currentDirectory: workingDirectory
         )
         state = .running
     }
@@ -70,6 +75,16 @@ final class LocalTerminalViewModel {
         guard let process, process.running else { return }
         var size = winsize(ws_row: UInt16(rows), ws_col: UInt16(cols), ws_xpixel: 0, ws_ypixel: 0)
         _ = ioctl(process.childfd, TIOCSWINSZ, &size)
+    }
+
+    private func markActive() {
+        isActive = true
+        activityTimer?.cancel()
+        activityTimer = Task {
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            isActive = false
+        }
     }
 
     func restart() {
