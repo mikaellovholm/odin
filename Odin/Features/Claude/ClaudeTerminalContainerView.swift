@@ -7,7 +7,7 @@ struct ClaudeTerminalContainerView: View {
     @State private var needsDirectorySelection = true
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .topTrailing) {
             TerminalRepresentable(
                 onTerminalViewCreated: { viewModel.setTerminalView($0) },
                 onDataSend: { viewModel.sendData($0) },
@@ -22,6 +22,7 @@ struct ClaudeTerminalContainerView: View {
             } else if viewModel.state != .running {
                 stateOverlay
             }
+
         }
         .background(.black)
         .ignoresSafeArea(.container)
