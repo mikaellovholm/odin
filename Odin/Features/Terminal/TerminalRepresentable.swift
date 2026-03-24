@@ -30,7 +30,7 @@ struct TerminalRepresentable: UIViewRepresentable {
             uiView.becomeFirstResponder()
         }
         let targetFont = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
-        if uiView.font?.pointSize != fontSize {
+        if uiView.font.pointSize != fontSize {
             uiView.font = targetFont
         }
     }

@@ -10,18 +10,40 @@ struct TerminalContainerView: View {
 
     var body: some View {
         ZStack {
-            // Terminal always in the hierarchy to preserve state
-            TerminalRepresentable(
-                onTerminalViewCreated: { viewModel.setTerminalView($0) },
-                onDataSend: { viewModel.sendData($0) },
-                onSizeChanged: { viewModel.resizeTerminal(cols: $0, rows: $1) },
+            VStack(spacing: 0) {
+                // Terminal always in the hierarchy to preserve state
+                terminalView
+                    .opacity(viewModel.state == .connected ? 1 : 0)
+
                 #if os(iOS)
-                fontSize: keyboardVisible ? 11 : 10,
+                // Quick buttons bar below terminal when keyboard is hidden
+                if viewModel.state == .connected && !keyboardVisible {
+                    HStack(spacing: 16) {
+                        Button {
+                            viewModel.sendData(ArraySlice("1".utf8))
+                        } label: {
+                            Text("1")
+                                .font(.system(size: 18, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(.white)
+                                .frame(width: 44, height: 44)
+                                .background(Color(red: 0.06, green: 0.11, blue: 0.18), in: RoundedRectangle(cornerRadius: 10))
+                        }
+                        Button {
+                            viewModel.sendData(ArraySlice("2".utf8))
+                        } label: {
+                            Text("2")
+                                .font(.system(size: 18, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(.white)
+                                .frame(width: 44, height: 44)
+                                .background(Color(red: 0.06, green: 0.11, blue: 0.18), in: RoundedRectangle(cornerRadius: 10))
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(.black)
+                }
                 #endif
-                isConnected: viewModel.state == .connected,
-                keyboardDismissed: $keyboardDismissed
-            )
-            .opacity(viewModel.state == .connected ? 1 : 0)
+            }
 
             // Overlay for non-connected states
             if viewModel.state != .connected {
@@ -55,30 +77,6 @@ struct TerminalContainerView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                 .padding(.trailing, 12)
                 .padding(.top, 80)
-
-                // Bottom-center quick buttons
-                HStack(spacing: 16) {
-                    Button {
-                        viewModel.sendData(ArraySlice("1".utf8))
-                    } label: {
-                        Text("1")
-                            .font(.system(size: 18, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(.white)
-                            .frame(width: 44, height: 44)
-                            .background(Color(red: 0.06, green: 0.11, blue: 0.18), in: RoundedRectangle(cornerRadius: 10))
-                    }
-                    Button {
-                        viewModel.sendData(ArraySlice("2".utf8))
-                    } label: {
-                        Text("2")
-                            .font(.system(size: 18, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(.white)
-                            .frame(width: 44, height: 44)
-                            .background(Color(red: 0.06, green: 0.11, blue: 0.18), in: RoundedRectangle(cornerRadius: 10))
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                .padding(.bottom, 12)
             }
             #endif
         }
@@ -100,6 +98,27 @@ struct TerminalContainerView: View {
                 viewModel.connect()
             }
         }
+    }
+
+    private var terminalView: some View {
+        #if os(iOS)
+        TerminalRepresentable(
+            onTerminalViewCreated: { viewModel.setTerminalView($0) },
+            onDataSend: { viewModel.sendData($0) },
+            onSizeChanged: { viewModel.resizeTerminal(cols: $0, rows: $1) },
+            fontSize: keyboardVisible ? 11 : 10,
+            isConnected: viewModel.state == .connected,
+            keyboardDismissed: $keyboardDismissed
+        )
+        #else
+        TerminalRepresentable(
+            onTerminalViewCreated: { viewModel.setTerminalView($0) },
+            onDataSend: { viewModel.sendData($0) },
+            onSizeChanged: { viewModel.resizeTerminal(cols: $0, rows: $1) },
+            isConnected: viewModel.state == .connected,
+            keyboardDismissed: $keyboardDismissed
+        )
+        #endif
     }
 
     @ViewBuilder
