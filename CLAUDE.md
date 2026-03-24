@@ -56,7 +56,7 @@ Uses SwiftTerm (terminal emulation) + Citadel (SSH) to connect to a GCP VM. Key 
 Uses SwiftTerm's `LocalProcess` to spawn the Claude Code CLI in a local PTY — no SSH or Cloud Function needed. Lives in `Odin/Features/Claude/`. Guarded by `#if os(macOS)` so iOS compilation is unaffected.
 
 - **ClaudeTerminalContainerView** — SwiftUI view reusing `TerminalRepresentable`. Shows progress spinner while starting, terminal when running, restart/retry overlays on exit/error.
-- **LocalTerminalViewModel** — `@Observable` state machine (starting → running → exited → error). Resolves the `claude` binary path (checks `/usr/local/bin`, `/opt/homebrew/bin`, `~/.local/bin`, then falls back to `which claude` via login shell). Spawns the process with `TERM=xterm-256color` and `COLORTERM=truecolor`. Handles terminal resize via `TIOCSWINSZ` ioctl on the PTY.
+- **LocalTerminalViewModel** — `@Observable` state machine (starting → running → exited → error). Resolves the `claude` binary path (checks `/usr/local/bin`, `/opt/homebrew/bin`, `~/.local/bin`, then falls back to `which claude` via login shell). Spawns the process with `TERM=xterm-256color` and `COLORTERM=truecolor`. Handles terminal resize via `TIOCSWINSZ` ioctl on the PTY. Exposes `isActive` based on Claude Code's terminal title: Claude sets the title prefix to a braille spinner (`⠂` U+2802 / `⠐` U+2810) when working and `✳` (U+2733) when idle. `handleTitleChanged(_:)` receives OSC 0 title updates via `TerminalRepresentable`'s `onTitleChanged` callback.
 - **ProcessBridge** — `@MainActor` adapter conforming to `LocalProcessDelegate`. Bridges process callbacks (data received, terminated, window size) to the view model via closures. All callbacks dispatched on the main queue.
 
 ### Cloud Function
