@@ -12,6 +12,7 @@ struct ClaudeTerminalContainerView: View {
                 onTerminalViewCreated: { viewModel.setTerminalView($0) },
                 onDataSend: { viewModel.sendData($0) },
                 onSizeChanged: { viewModel.resizeTerminal(cols: $0, rows: $1) },
+                onTitleChanged: { viewModel.handleTitleChanged($0) },
                 isConnected: viewModel.state == .running,
                 keyboardDismissed: $keyboardDismissed
             )

@@ -17,7 +17,6 @@ final class LocalTerminalViewModel {
     var isActive: Bool = false
 
     private var process: LocalProcess?
-    private var activityTimer: Task<Void, Never>?
     private var bridge: ProcessBridge?
     private(set) weak var terminalView: TerminalView?
 
@@ -34,7 +33,6 @@ final class LocalTerminalViewModel {
         let bridge = ProcessBridge(
             onData: { [weak self] slice in
                 self?.terminalView?.feed(byteArray: slice)
-                self?.markActive()
             },
             onTerminated: { [weak self] exitCode in
                 self?.state = .exited(code: exitCode)
@@ -77,12 +75,15 @@ final class LocalTerminalViewModel {
         _ = ioctl(process.childfd, TIOCSWINSZ, &size)
     }
 
-    private func markActive() {
-        isActive = true
-        activityTimer?.cancel()
-        activityTimer = Task {
-            try? await Task.sleep(for: .seconds(2))
-            guard !Task.isCancelled else { return }
+    /// Claude Code signals its state via the terminal title prefix:
+    /// ✳ (U+2733) = idle/waiting for input
+    /// ⠂ (U+2802) / ⠐ (U+2810) = actively working
+    func handleTitleChanged(_ title: String) {
+        guard let first = title.first else { return }
+        switch first {
+        case "\u{2802}", "\u{2810}":
+            isActive = true
+        default:
             isActive = false
         }
     }
