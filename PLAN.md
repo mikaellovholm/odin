@@ -67,9 +67,20 @@ odin/
         ClaudeSession.swift              -- Per-session model: id, dir, viewModel
         ClaudeSessionStore.swift         -- Observable store (sessions, selection, persistence)
         ClaudeSessionListView.swift      -- Claude tab: HSplitView sidebar + detail
-        ClaudeSessionRow.swift           -- Sidebar row (dot, name, ⌘N hint)
+        ClaudeSessionRow.swift           -- Sidebar row (status indicator, name, ⌘N hint)
         ClaudeSessionDetailView.swift    -- Terminal pane wrapping TerminalRepresentable
-        LocalTerminalViewModel.swift     -- Spawns claude CLI via LocalProcess + PTY
+        LocalTerminalViewModel.swift    -- Spawns claude CLI via LocalProcess + PTY,
+                                         --  carries sessionId, holds pendingNotifications
+
+      OdinMCP/                         -- macOS only (#if os(macOS))
+        OdinMCPServer.swift              -- Local HTTP MCP server (NWListener, JSON-RPC 2.0)
+        OdinMCPTools.swift               -- run_background_task / get_task_status / await_task
+        BackgroundClaudeRunner.swift     -- Foundation.Process wrapper for claude -p workers
+        BackgroundTaskRegistry.swift     -- @MainActor task store keyed by t-<8 hex>
+        OdinSessionRegistry.swift        -- sessionId → LocalTerminalViewModel (weak)
+        ClaudePath.swift                 -- Shared claude binary resolver
+        OdinSkillInstaller.swift         -- Writes odin-spawn/odin-orchestrate SKILL.md
+        OdinHookInstaller.swift          -- Writes drain script + merges UserPromptSubmit hook
 ```
 
 ## Dependencies (3 external packages)
@@ -191,6 +202,25 @@ Replaced the single-session UI with a sidebar + detail layout (see `multiple.md`
 7. ~~Clamp PTY winsize ints (`UInt16(clamping:)`) to handle transient zero/negative dims during HSplitView layout~~
 
 **Notes:** Switching sessions resets the visible scrollback (SwiftUI rebuilds `TerminalView` on `.id(session.id)`), but the underlying process keeps running. Removing a session sends SIGTERM via `LocalProcess.terminate()`.
+
+### Phase 3d: OdinMCP — Background Claude Workers (macOS only) — DONE
+Give each Odin Claude tab an in-process MCP server that spawns headless `claude -p` workers and pushes results back into the originating session.
+
+1. ~~Build `OdinMCPServer` — `NWListener` on `127.0.0.1` ephemeral port, JSON-RPC 2.0 at `POST /mcp`, handles `initialize` / `tools/list` / `tools/call` / `notifications/initialized` / `ping`~~
+2. ~~Implement `BackgroundClaudeRunner` (Foundation `Process` + pipes, captures stdout/stderr, polls completion at 100 ms granularity) and `BackgroundTaskRegistry` (`@MainActor` singleton)~~
+3. ~~Define MCP tools: `run_background_task(prompt, cwd?)` returns immediately; `get_task_status(task_id)` non-blocking; `await_task(task_id, timeout_seconds?)` blocks (use sparingly)~~
+4. ~~Wire `LocalTerminalViewModel.startClaude()`: mint per-launch `sessionId`, write per-launch `.mcp.json` with `headers: {X-Session-Id: ...}` and `--mcp-config <path>`, set `ODIN_SESSION_ID` in env, register with `OdinSessionRegistry`~~
+5. ~~`OdinMCPServer` extracts `X-Session-Id` into a `@TaskLocal`; `runBackgroundTask` plucks it out and tags the runner~~
+6. ~~Runner completion writes `~/.claude/odin-pending/<sessionId>.txt` (for the hook) and pushes a `BackgroundNotification` into the matching `LocalTerminalViewModel.pendingNotifications` (for the sidebar)~~
+7. ~~`OdinSkillInstaller`: write `odin-spawn` and `odin-orchestrate` SKILL.md files to `~/.claude/skills/` (always overwrites — source edits propagate on relaunch)~~
+8. ~~`OdinHookInstaller`: write `~/.claude/hooks/odin-pending.sh` (chmod 755) and idempotently merge an entry into `hooks.UserPromptSubmit` in `~/.claude/settings.json`~~
+9. ~~Sidebar indicator (`ClaudeSessionRow`): green `checkmark.circle.fill` when `pendingNotifications` is non-empty, otherwise the existing active-state dot~~
+10. ~~Auto-dismiss notifications when the user opens the session (`ClaudeSessionStore.select(_:)`)~~
+
+**Notes:** Workers run with `--dangerously-skip-permissions` since there's no human to approve tool calls — scope prompts narrowly. The sidebar checkmark and the hook injection are complementary: the human sees the indicator the moment the task completes, and Claude sees the full result as context on the user's next turn. Files written outside the repo are listed in CLAUDE.md.
+
+**Not yet done:**
+- Surfacing in-flight task count anywhere in the UI
 
 ### Phase 4: Polish
 - ~~App icon~~ (Norse god + ravens design)

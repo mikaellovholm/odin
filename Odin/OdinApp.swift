@@ -19,6 +19,18 @@ struct OdinApp: App {
         } catch {
             fatalError("Failed to create ModelContainer: \(error)")
         }
+
+        #if os(macOS)
+        Task { @MainActor in
+            OdinSkillInstaller.install()
+            OdinHookInstaller.install()
+            do {
+                try OdinMCPServer.shared.start()
+            } catch {
+                NSLog("[OdinMCP] failed to start server: \(error)")
+            }
+        }
+        #endif
     }
 
     var body: some Scene {

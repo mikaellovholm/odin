@@ -37,6 +37,14 @@ final class ClaudeSessionStore {
             session.viewModel.startClaude()
         }
         session.viewModel.clearFinished()
+        // Dismiss only the notifications visible at click time. If a worker
+        // completes between this turn and a future scheduler tick, its
+        // notification gets its own row + checkmark — we don't accidentally
+        // clear something the user never saw.
+        let acknowledgedIds = session.viewModel.pendingNotifications.map(\.id)
+        for id in acknowledgedIds {
+            session.viewModel.dismissBackgroundNotification(id: id)
+        }
     }
 
     private func persist() {
