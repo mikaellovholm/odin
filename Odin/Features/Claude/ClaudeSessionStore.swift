@@ -36,7 +36,7 @@ final class ClaudeSessionStore {
         if session.viewModel.state == .notStarted {
             session.viewModel.startClaude()
         }
-        session.viewModel.clearFinished()
+        session.viewModel.acknowledge()
         // Dismiss only the notifications visible at click time. If a worker
         // completes between this turn and a future scheduler tick, its
         // notification gets its own row + checkmark — we don't accidentally

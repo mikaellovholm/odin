@@ -27,14 +27,37 @@ final class LocalTerminalViewModel {
 
     var state: State = .notStarted
     var workingDirectory: String = NSHomeDirectory()
+    /// Claude is currently processing (`UserPromptSubmit` fired, `Stop` has not
+    /// yet). Drives the yellow pulsing dot.
     var isActive: Bool = false
+    /// Claude finished a turn without acknowledgement. Set when the hook-driven
+    /// state transitions from `working` to `idle`; cleared by `acknowledge()`.
     var didFinish: Bool = false
+    /// Claude raised a `Notification` (permission prompt, idle reminder, etc).
+    /// Drives the green "needs attention" dot. Cleared by `acknowledge()`.
+    var awaitingInput: Bool = false
     var pendingNotifications: [BackgroundNotification] = []
 
     private(set) var sessionId: String?
     /// Path of the per-launch .mcp.json written by `writeMCPConfig`. Deleted
     /// when the session terminates or restarts to prevent $TMPDIR accumulation.
     private var mcpConfigPath: String?
+
+    /// Path of the per-session state file written by the `odin-status.sh` hook
+    /// and watched by `statusFileSource`. Cleaned up on teardown.
+    private var statusFilePath: String?
+    private var statusFileSource: DispatchSourceFileSystemObject?
+
+    /// Timestamp of the last byte received from the child PTY. Used by the
+    /// idle-heartbeat timer to detect Claude blocking on a slash-command menu
+    /// or other interactive prompt that doesn't fire the `Notification` hook.
+    private var lastDataReceivedAt: Date?
+    private var heartbeatTimer: DispatchSourceTimer?
+
+    /// How long PTY output must be silent while `isActive` is true before we
+    /// promote the session to `awaitingInput`. 2s is short enough to feel
+    /// responsive but long enough to not trip on normal streaming pauses.
+    private static let heartbeatIdleThreshold: TimeInterval = 2.0
 
     private var process: LocalProcess?
     private var bridge: ProcessBridge?
@@ -52,10 +75,13 @@ final class LocalTerminalViewModel {
 
         // Per-launch identity. Shared between the X-Session-Id MCP header
         // (lets the server route background task completions back here) and
-        // the ODIN_SESSION_ID env var (read by the UserPromptSubmit hook).
+        // the ODIN_SESSION_ID env var (read by the UserPromptSubmit, Stop,
+        // Notification, and SessionEnd hooks).
         let sessionId = "s-" + UUID().uuidString.prefix(8).lowercased()
         self.sessionId = sessionId
         OdinSessionRegistry.shared.register(self, for: sessionId)
+        startStatusWatcher(sessionId: sessionId)
+        startHeartbeat()
 
         var args: [String] = []
         if let mcpURL = OdinMCPServer.shared.mcpURL,
@@ -67,6 +93,7 @@ final class LocalTerminalViewModel {
         let bridge = ProcessBridge(
             onData: { [weak self] slice in
                 self?.terminalView?.feed(byteArray: slice)
+                self?.noteDataReceived()
             },
             onTerminated: { [weak self] exitCode in
                 self?.state = .exited(code: exitCode)
@@ -111,24 +138,16 @@ final class LocalTerminalViewModel {
         _ = ioctl(process.childfd, TIOCSWINSZ, &size)
     }
 
-    /// Claude Code signals its state via the terminal title prefix:
-    /// ✳ (U+2733) = idle/waiting for input
-    /// ⠂ (U+2802) / ⠐ (U+2810) = actively working
-    func handleTitleChanged(_ title: String) {
-        guard let first = title.first else { return }
-        let wasActive = isActive
-        switch first {
-        case "\u{2802}", "\u{2810}":
-            isActive = true
-        default:
-            isActive = false
-        }
-        if wasActive && !isActive {
-            didFinish = true
-        }
-    }
-
-    func clearFinished() {
+    /// Acknowledge the "just finished" yellow-stable dot so the sidebar
+    /// indicator falls back to grey. Called when the user clicks the session
+    /// row or when the session is the one currently being viewed.
+    ///
+    /// `awaitingInput` is deliberately *not* cleared here: that flag means
+    /// "Claude is blocked on user input", which is only resolved by the user
+    /// actually submitting (UserPromptSubmit hook → state="working" → flag
+    /// clears via `applyHookState`). Clicking the row to look at the prompt
+    /// is not the same as responding to it.
+    func acknowledge() {
         didFinish = false
     }
 
@@ -142,24 +161,154 @@ final class LocalTerminalViewModel {
         pendingNotifications.removeAll()
         process = nil
         bridge = nil
+        isActive = false
         didFinish = false
+        awaitingInput = false
         terminalView?.getTerminal().resetToInitialState()
         startClaude()
     }
 
     /// Unregisters the session from the registry and cleans up files that were
-    /// written for the session: the per-launch .mcp.json in $TMPDIR and any
-    /// pending-notification file in ~/.claude/odin-pending/.
+    /// written for the session: the per-launch .mcp.json in $TMPDIR, the
+    /// pending-notification file in ~/.claude/odin-pending/, and the
+    /// hook-driven state file in ~/.claude/odin-status/.
     private func tearDownCurrentSession() {
+        stopStatusWatcher()
+        stopHeartbeat()
         if let oldId = sessionId {
             OdinSessionRegistry.shared.unregister(oldId)
             let pendingFile = NSHomeDirectory() + "/.claude/odin-pending/\(oldId).txt"
             try? FileManager.default.removeItem(atPath: pendingFile)
+            let statusFile = NSHomeDirectory() + "/.claude/odin-status/\(oldId).state"
+            try? FileManager.default.removeItem(atPath: statusFile)
         }
         sessionId = nil
         if let path = mcpConfigPath {
             try? FileManager.default.removeItem(atPath: path)
             mcpConfigPath = nil
+        }
+    }
+
+    // MARK: - Hook-driven status
+
+    /// Pre-creates the per-session state file and starts a `DispatchSource`
+    /// watcher on it. The `odin-status.sh` hook (registered by
+    /// `OdinHookInstaller`) writes one of `working`, `idle`, `awaiting-input`
+    /// into this file on each Claude lifecycle event; we drive `isActive`,
+    /// `awaitingInput`, and `didFinish` from those writes.
+    private func startStatusWatcher(sessionId: String) {
+        let dir = NSHomeDirectory() + "/.claude/odin-status"
+        try? FileManager.default.createDirectory(
+            atPath: dir,
+            withIntermediateDirectories: true
+        )
+        let path = dir + "/\(sessionId).state"
+        // Pre-create with empty content so we have a stable inode to watch.
+        // Subsequent hook writes are truncate-and-overwrite (same inode), so a
+        // single file-level kqueue source catches every state transition.
+        if !FileManager.default.fileExists(atPath: path) {
+            FileManager.default.createFile(atPath: path, contents: nil)
+        }
+        let fd = open(path, O_EVTONLY)
+        guard fd >= 0 else {
+            NSLog("[Odin] failed to open status file for watching: \(path)")
+            return
+        }
+        statusFilePath = path
+        let src = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .extend, .delete, .rename],
+            queue: .main
+        )
+        src.setEventHandler { [weak self] in
+            self?.readStatusFile()
+        }
+        src.setCancelHandler {
+            close(fd)
+        }
+        src.resume()
+        statusFileSource = src
+        // Pick up any state already written (e.g. if a hook fired between
+        // pre-create and watcher attach).
+        readStatusFile()
+    }
+
+    private func stopStatusWatcher() {
+        statusFileSource?.cancel()
+        statusFileSource = nil
+        statusFilePath = nil
+    }
+
+    // MARK: - PTY heartbeat
+
+    /// Records that bytes arrived from the child PTY. Resumes "working"
+    /// presentation if a previous silence promoted the session to
+    /// `awaitingInput` via the heartbeat.
+    private func noteDataReceived() {
+        lastDataReceivedAt = Date()
+        // If the heartbeat had promoted us to awaiting-input but real output
+        // is flowing again, demote back to active.
+        if awaitingInput && isActive {
+            awaitingInput = false
+        }
+    }
+
+    /// Ticks every 500ms while a session is running. When `isActive` is true
+    /// but no PTY bytes have arrived for `heartbeatIdleThreshold`, promote the
+    /// session to `awaitingInput`. This catches slash-command menus and other
+    /// interactive prompts that don't fire Claude Code's `Notification` hook
+    /// — the dot turns green even though Claude considers itself mid-turn.
+    private func startHeartbeat() {
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + 0.5, repeating: 0.5)
+        timer.setEventHandler { [weak self] in
+            self?.checkHeartbeat()
+        }
+        timer.resume()
+        heartbeatTimer = timer
+    }
+
+    private func stopHeartbeat() {
+        heartbeatTimer?.cancel()
+        heartbeatTimer = nil
+        lastDataReceivedAt = nil
+    }
+
+    private func checkHeartbeat() {
+        guard isActive, !awaitingInput,
+              let last = lastDataReceivedAt,
+              Date().timeIntervalSince(last) >= Self.heartbeatIdleThreshold
+        else { return }
+        awaitingInput = true
+    }
+
+    private func readStatusFile() {
+        guard let path = statusFilePath,
+              let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              let raw = String(data: data, encoding: .utf8) else { return }
+        let state = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !state.isEmpty else { return }
+        applyHookState(state)
+    }
+
+    private func applyHookState(_ hookState: String) {
+        let wasActive = isActive
+        switch hookState {
+        case "working":
+            isActive = true
+            awaitingInput = false
+        case "idle":
+            isActive = false
+            awaitingInput = false
+            if wasActive { didFinish = true }
+        case "awaiting-input":
+            // Claude is still mid-turn, just blocked on user input — keep
+            // `isActive` true so that when the user responds and bytes resume
+            // flowing, `noteDataReceived` can clear `awaitingInput` (it gates
+            // the demotion on `isActive` so unrelated stray bytes don't trip it).
+            awaitingInput = true
+        default:
+            break
         }
     }
 

@@ -64,7 +64,8 @@ struct ClaudeSessionListView: View {
             ForEach(Array(store.sessions.enumerated()), id: \.element.id) { index, session in
                 ClaudeSessionRow(
                     session: session,
-                    shortcutNumber: index < 9 ? index + 1 : nil
+                    shortcutNumber: index < 9 ? index + 1 : nil,
+                    isSelected: store.selectedSessionID == session.id
                 )
                 .tag(session.id)
                 .contextMenu {
