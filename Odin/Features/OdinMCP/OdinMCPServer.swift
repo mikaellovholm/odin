@@ -54,16 +54,22 @@ final class OdinMCPServer {
 
     private func handle(connection: NWConnection) {
         // Defense in depth: reject any connection that isn't from loopback.
+        // Fail-closed: if the endpoint isn't a recognised loopback address for
+        // any reason, cancel immediately rather than allowing the connection.
+        var isLoopback = false
         if case let .hostPort(host, _) = connection.endpoint {
             switch host {
             case .ipv4(let v4) where v4 == .loopback:
-                break
+                isLoopback = true
             case .ipv6(let v6) where v6 == .loopback:
-                break
+                isLoopback = true
             default:
-                connection.cancel()
-                return
+                break
             }
+        }
+        guard isLoopback else {
+            connection.cancel()
+            return
         }
         let parser = HTTPRequestParser()
         connection.start(queue: .main)

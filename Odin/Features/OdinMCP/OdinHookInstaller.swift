@@ -29,8 +29,13 @@ enum OdinHookInstaller {
     [[ -n "$ODIN_SESSION_ID" ]] || exit 0
     PENDING="$HOME/.claude/odin-pending/$ODIN_SESSION_ID.txt"
     [[ -f "$PENDING" ]] || exit 0
-    cat "$PENDING"
-    rm -f "$PENDING"
+    # Atomically claim the file with rename before reading so that a concurrent
+    # completion notification appended between cat and rm can't be silently lost.
+    TMP=$(mktemp)
+    if mv "$PENDING" "$TMP" 2>/dev/null; then
+        cat "$TMP"
+        rm -f "$TMP"
+    fi
     """#
 
     private static func installScript() {
@@ -86,7 +91,9 @@ enum OdinHookInstaller {
                 withJSONObject: root,
                 options: [.prettyPrinted, .sortedKeys]
             )
-            try out.write(to: URL(fileURLWithPath: settingsPath))
+            // Write atomically (temp file + rename) so a crash mid-write can't
+            // leave the user's settings.json truncated or empty.
+            try out.write(to: URL(fileURLWithPath: settingsPath), options: .atomic)
             NSLog("[OdinHook] registered UserPromptSubmit hook → \(scriptPath)")
         } catch {
             NSLog("[OdinHook] failed to update settings.json: \(error)")

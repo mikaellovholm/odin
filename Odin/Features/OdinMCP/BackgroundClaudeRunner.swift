@@ -68,31 +68,26 @@ final class BackgroundClaudeRunner {
         p.standardError = errPipe
         p.standardInput = FileHandle.nullDevice
 
-        outPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let chunk = handle.availableData
-            guard !chunk.isEmpty else { return }
-            Task { @MainActor [weak self] in
-                self?.stdoutBuffer.append(chunk)
-            }
-        }
-        errPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let chunk = handle.availableData
-            guard !chunk.isEmpty else { return }
-            Task { @MainActor [weak self] in
-                self?.stderrBuffer.append(chunk)
-            }
-        }
-
+        // Collect all output in the termination handler rather than using
+        // readabilityHandler callbacks. Mixing the two creates an ordering race:
+        // readabilityHandler Tasks dispatched to MainActor can execute *after*
+        // the terminationHandler Task (and therefore after finish()), leaving
+        // stdoutBuffer/stderrBuffer incomplete when the result is captured.
+        //
+        // Since the process has already exited when terminationHandler fires,
+        // both write-ends are closed and readDataToEndOfFile() returns
+        // immediately with all buffered output — no blocking occurs.
+        //
+        // Note: macOS pipe buffers are ~64 KB. Workers producing more output
+        // than that may stall; keep spawned prompts concise.
         p.terminationHandler = { [weak self] proc in
-            outPipe.fileHandleForReading.readabilityHandler = nil
-            errPipe.fileHandleForReading.readabilityHandler = nil
-            let remainingOut = outPipe.fileHandleForReading.readDataToEndOfFile()
-            let remainingErr = errPipe.fileHandleForReading.readDataToEndOfFile()
+            let output = outPipe.fileHandleForReading.readDataToEndOfFile()
+            let errput = errPipe.fileHandleForReading.readDataToEndOfFile()
             let exitCode = proc.terminationStatus
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.stdoutBuffer.append(remainingOut)
-                self.stderrBuffer.append(remainingErr)
+                self.stdoutBuffer = output
+                self.stderrBuffer = errput
                 self.finish(exitCode: exitCode)
             }
         }
@@ -109,6 +104,13 @@ final class BackgroundClaudeRunner {
         guard state == .running else { return }
         let stdoutText = String(data: stdoutBuffer, encoding: .utf8) ?? ""
         let stderrText = String(data: stderrBuffer, encoding: .utf8) ?? ""
+        // Release raw byte buffers and the Process reference now that we've
+        // extracted everything we need. Whatever the consumer wants lives in
+        // `state` from here on. Pipe FDs were already closed by
+        // readDataToEndOfFile in the termination handler.
+        stdoutBuffer = Data()
+        stderrBuffer = Data()
+        process = nil
         let trimmed = stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
         if exitCode == 0 {
             state = .completed(trimmed)
@@ -194,7 +196,9 @@ final class BackgroundClaudeRunner {
                     try handle.seekToEnd()
                     try handle.write(contentsOf: data)
                 } else {
-                    try data.write(to: URL(fileURLWithPath: file))
+                    // .atomic (temp-file + rename) prevents a partial write
+                    // if the app is killed while creating the pending file.
+                    try data.write(to: URL(fileURLWithPath: file), options: .atomic)
                 }
             }
         } catch {
@@ -202,10 +206,14 @@ final class BackgroundClaudeRunner {
         }
     }
 
-    /// Poll until completion or timeout. Returns nil on timeout, state otherwise.
+    /// Poll until completion or timeout. Returns nil on timeout or Task cancellation, state otherwise.
     func awaitCompletion(timeout: TimeInterval?) async -> State? {
         let deadline = timeout.map { Date().addingTimeInterval($0) }
         while state == .running {
+            // Exit cleanly if the parent MCP connection was dropped and the
+            // enclosing Task was cancelled (avoids holding the connection open
+            // until the worker finishes or the timeout fires).
+            if Task.isCancelled { return nil }
             if let deadline, Date() >= deadline { return nil }
             try? await Task.sleep(nanoseconds: 100_000_000)
         }

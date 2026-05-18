@@ -2,7 +2,20 @@
 import Foundation
 
 enum ClaudePath {
+    // Cached after the first call. Both successful and failed lookups are
+    // cached so the expensive zsh shell-out only ever runs once per launch.
+    // All callers run on @MainActor, so no locking is needed.
+    private static var _resolved = false
+    private static var _cachedPath: String? = nil
+
     static func resolve() -> String? {
+        if _resolved { return _cachedPath }
+        _resolved = true
+        _cachedPath = _freshResolve()
+        return _cachedPath
+    }
+
+    private static func _freshResolve() -> String? {
         let knownPaths = [
             "/usr/local/bin/claude",
             "/opt/homebrew/bin/claude",

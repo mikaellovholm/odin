@@ -32,6 +32,9 @@ final class LocalTerminalViewModel {
     var pendingNotifications: [BackgroundNotification] = []
 
     private(set) var sessionId: String?
+    /// Path of the per-launch .mcp.json written by `writeMCPConfig`. Deleted
+    /// when the session terminates or restarts to prevent $TMPDIR accumulation.
+    private var mcpConfigPath: String?
 
     private var process: LocalProcess?
     private var bridge: ProcessBridge?
@@ -58,6 +61,7 @@ final class LocalTerminalViewModel {
         if let mcpURL = OdinMCPServer.shared.mcpURL,
            let configPath = Self.writeMCPConfig(url: mcpURL, sessionId: sessionId) {
             args.append(contentsOf: ["--mcp-config", configPath])
+            mcpConfigPath = configPath
         }
 
         let bridge = ProcessBridge(
@@ -129,24 +133,34 @@ final class LocalTerminalViewModel {
     }
 
     func terminate() {
-        if let oldId = sessionId {
-            OdinSessionRegistry.shared.unregister(oldId)
-        }
-        sessionId = nil
+        tearDownCurrentSession()
         process?.terminate()
     }
 
     func restart() {
-        if let oldId = sessionId {
-            OdinSessionRegistry.shared.unregister(oldId)
-        }
-        sessionId = nil
+        tearDownCurrentSession()
         pendingNotifications.removeAll()
         process = nil
         bridge = nil
         didFinish = false
         terminalView?.getTerminal().resetToInitialState()
         startClaude()
+    }
+
+    /// Unregisters the session from the registry and cleans up files that were
+    /// written for the session: the per-launch .mcp.json in $TMPDIR and any
+    /// pending-notification file in ~/.claude/odin-pending/.
+    private func tearDownCurrentSession() {
+        if let oldId = sessionId {
+            OdinSessionRegistry.shared.unregister(oldId)
+            let pendingFile = NSHomeDirectory() + "/.claude/odin-pending/\(oldId).txt"
+            try? FileManager.default.removeItem(atPath: pendingFile)
+        }
+        sessionId = nil
+        if let path = mcpConfigPath {
+            try? FileManager.default.removeItem(atPath: path)
+            mcpConfigPath = nil
+        }
     }
 
     // MARK: - Background notifications
