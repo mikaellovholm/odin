@@ -4,6 +4,7 @@ import SwiftUI
 struct ClaudeSessionDetailView: View {
     let session: ClaudeSession
     @State private var keyboardDismissed = false
+    @AppStorage(TerminalFontSettings.key) private var fontSize: Double = Double(TerminalFontSettings.defaultSize)
 
     private var viewModel: LocalTerminalViewModel { session.viewModel }
 
@@ -13,6 +14,7 @@ struct ClaudeSessionDetailView: View {
                 onTerminalViewCreated: { viewModel.setTerminalView($0) },
                 onDataSend: { viewModel.sendData($0) },
                 onSizeChanged: { viewModel.resizeTerminal(cols: $0, rows: $1) },
+                fontSize: CGFloat(fontSize),
                 isConnected: viewModel.state == .running,
                 keyboardDismissed: $keyboardDismissed
             )
@@ -23,6 +25,7 @@ struct ClaudeSessionDetailView: View {
             }
         }
         .background(.black)
+        .background(FontZoomShortcuts())
         .onAppear { focusTerminal() }
         .onChange(of: viewModel.state) { _, newState in
             if newState == .running { focusTerminal() }

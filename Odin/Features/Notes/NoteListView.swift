@@ -43,6 +43,9 @@ struct NoteListView: View {
                         Image(systemName: "plus")
                     }
                 }
+                ToolbarItem(placement: .automatic) {
+                    CloudKitSyncStatusView()
+                }
             }
             .overlay {
                 if notes.isEmpty {
@@ -59,6 +62,9 @@ struct NoteListView: View {
             } else {
                 ContentUnavailableView("Select a Note", systemImage: "note.text")
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .odinCreateNewNote)) { _ in
+            createNote()
         }
     }
 

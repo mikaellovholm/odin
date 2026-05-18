@@ -6,6 +6,9 @@ struct TodoListView: View {
     @Query(sort: \TodoItem.sortOrder) private var todos: [TodoItem]
     @State private var showingAddSheet = false
     @State private var editingTodo: TodoItem?
+    #if os(iOS)
+    @State private var showingSettings = false
+    #endif
 
     private var incompleteTodos: [TodoItem] {
         todos.filter { !$0.isCompleted }
@@ -62,6 +65,18 @@ struct TodoListView: View {
                         Image(systemName: "plus")
                     }
                 }
+                ToolbarItem(placement: .automatic) {
+                    CloudKitSyncStatusView()
+                }
+                #if os(iOS)
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showingSettings = true
+                    } label: {
+                        Image(systemName: "gear")
+                    }
+                }
+                #endif
             }
             .sheet(isPresented: $showingAddSheet) {
                 TodoDetailView()
@@ -69,6 +84,21 @@ struct TodoListView: View {
             .sheet(item: $editingTodo) { todo in
                 TodoDetailView(existingTodo: todo)
             }
+            .onReceive(NotificationCenter.default.publisher(for: .odinCreateNewTodo)) { _ in
+                showingAddSheet = true
+            }
+            #if os(iOS)
+            .sheet(isPresented: $showingSettings) {
+                NavigationStack {
+                    SettingsView()
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") { showingSettings = false }
+                            }
+                        }
+                }
+            }
+            #endif
             .overlay {
                 if todos.isEmpty {
                     ContentUnavailableView(

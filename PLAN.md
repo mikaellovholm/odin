@@ -171,9 +171,9 @@ GCP VM (claude-dev-vm, ephemeral IP from Cloud Function)
 5. ~~Implement SSHService — actor-based Citadel SSH client with PTY, host key verification via `.trustedKeys()`~~
 6. ~~Build TerminalContainerView (setup screen → VM start → SSH connect → terminal display, overlay buttons)~~
 7. ~~Add VM startup progress UI with estimated wait time and cancel button (cold start takes 20-40s)~~
-8. ~~Implement disconnection detection and manual reconnect button~~ — auto-reconnect on SSH drops not yet implemented
-9. Add iOS keyboard accessory bar with Ctrl, Tab, Esc, arrow keys — terminal is unusable on iPhone without this
-10. Add font size control (pinch-to-zoom or setting) — especially important on iPhone
+8. ~~Implement disconnection detection and manual reconnect button~~ ~~auto-reconnect on SSH drops~~ — now reconnects automatically with backoff (`TerminalViewModel.scheduleAutoReconnect`)
+9. ~~Add iOS keyboard accessory bar with Ctrl, Tab, Esc, arrow keys~~ — rendered in SwiftUI via `safeAreaInset` (TerminalAccessoryBar)
+10. ~~Add font size control (pinch-to-zoom or setting)~~ — `TerminalFontSettings` + pinch on iOS + Cmd+/- on macOS, exposed in Settings
 11. ~~One-time setup: API key entry screen → SSH key generation → copy public key → add to GCP~~
 12. ~~Test: tap Terminal tab → VM starts → SSH connects → tmux session visible, verify on both platforms~~
 
@@ -220,33 +220,39 @@ Give each Odin Claude tab an in-process MCP server that spawns headless `claude 
 **Notes:** Workers run with `--dangerously-skip-permissions` since there's no human to approve tool calls — scope prompts narrowly. The sidebar checkmark and the hook injection are complementary: the human sees the indicator the moment the task completes, and Claude sees the full result as context on the user's next turn. Files written outside the repo are listed in CLAUDE.md.
 
 **Not yet done:**
-- Surfacing in-flight task count anywhere in the UI
+- ~~Surfacing in-flight task count anywhere in the UI~~ — sidebar header badge + per-row indicator, observable via `BackgroundTaskRegistry.runningCount`
 
 ### Phase 4: Polish
 - ~~App icon~~ (Norse god + ravens design)
 - ~~All three tabs visible~~ (no "coming soon" placeholders needed — all features implemented)
-- Theming
-- macOS keyboard shortcuts
-- Markdown keyboard shortcuts (Cmd+B, Cmd+I) — deferred from Phase 2
-- Error handling improvements
-- CloudKit sync conflict indication — surface merge issues to the user rather than silently dropping edits
+- ~~Theming~~ — `SettingsView` + `ThemedContainer`; appearance (system/light/dark) + accent color
+- ~~macOS keyboard shortcuts~~ — `Go` menu (⌥⌘1…4), New Todo (⌘N) / New Note (⇧⌘N), `Cmd+,` Settings, `Cmd+=`/`Cmd+-`/`Cmd+0` terminal font
+- ~~Markdown keyboard shortcuts (Cmd+B, Cmd+I)~~ — implemented via `MarkdownTextEditor` (UITextView/NSTextView), incl. Cmd+K for links
+- Error handling improvements — make failures legible and actionable rather than dumping raw `localizedDescription`:
+  - Citadel/NIOSSH errors surface as opaque type names (e.g. `invalidChannelType`) in `TerminalViewModel.error` overlays. Translate the common cases to plain messages.
+  - `BackgroundClaudeRunner.appendPendingNotification` only `NSLog`s on write failure; the UI never knows a worker's notification was lost. Push a banner on file-write failure too.
+  - `NotificationManager` / `APIKeyManager` save failures are silently swallowed in some call sites — at minimum log via `OSLog`, ideally show a non-blocking toast.
+  - Error overlays (`TerminalContainerView`, `ClaudeSessionDetailView`) show the message but offer no next step. Add a "Copy details" button so the user can paste the error when reporting.
+- ~~CloudKit sync conflict indication~~ — toolbar badge backed by `CloudKitSyncMonitor` observing `NSPersistentCloudKitContainer.eventChangedNotification`
 
 ## Security
 
 ### Cloud Function Authentication — DONE
 - ~~Require a secret API key in `X-API-Key` header, validated by the function against `API_KEY` env var~~
 - ~~API key stored in Keychain on device via APIKeyManager, prompted on first use~~
-- Rate limiting not yet implemented (e.g., max 5 starts per hour to cap billing exposure)
-- IAM-level restriction (`roles/cloudfunctions.invoker`) not yet applied — function uses `--allow-unauthenticated` with API key validation only
+- ~~Rate limiting~~ — function returns HTTP 429 (with `Retry-After`) after 10 cold starts per rolling hour; surfaced in app as `VMStarterError.rateLimited`
+- IAM-level restriction (`roles/cloudfunctions.invoker`) not yet applied — function uses `--allow-unauthenticated` with API key validation only. Consequences: the Node runtime executes (and bills) for every scanner hit before the key check returns 401; a leaked URL is a DoS / cost vector even though every request 401s; the API key lives in an env var rather than Secret Manager with no rotation story.
+  - Proper fix: `gcloud functions deploy ... --no-allow-unauthenticated` + grant `roles/cloudfunctions.invoker` to a specific identity, then have the app send a Google ID token in `Authorization: Bearer ...`. GCP rejects unauthenticated callers at the edge.
+  - Blocker: the client doesn't currently have a Google sign-in flow to mint that token. Adding Sign in with Google (or moving the API key into Secret Manager as an interim hardening) is the next step.
 
 ### SSH Host Key Verification — DONE
 - ~~Cloud Function returns the VM's full SSH host key from instance metadata~~
 - ~~App verifies host key on every connect via Citadel's `.trustedKeys()` validator~~
 - ~~Connections rejected if server key doesn't match~~
 
-### SSH Key Protection — PARTIALLY DONE
+### SSH Key Protection — DONE
 - ~~`kSecAttrAccessibleWhenUnlockedThisDeviceOnly` prevents iCloud Keychain sync~~
-- Biometric auth (Face ID / Touch ID) via `SecAccessControlCreateWithFlags` with `.biometryCurrentSet` — NOT yet implemented
+- ~~Biometric auth (Face ID / Touch ID) via `SecAccessControlCreateWithFlags` with `.biometryCurrentSet`~~ — toggleable in Settings; re-stores existing key without regenerating
 
 ### Data Sensitivity Boundaries
 - **Keychain only**: SSH private key, Cloud Function API key

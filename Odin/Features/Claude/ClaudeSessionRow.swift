@@ -18,6 +18,16 @@ struct ClaudeSessionRow: View {
                     .frame(width: 12, height: 12)
             }
             Spacer()
+            if let count = runningTaskCount, count > 0 {
+                HStack(spacing: 3) {
+                    Image(systemName: "bolt.fill")
+                        .font(.caption2)
+                    Text("\(count)")
+                        .font(.caption.monospacedDigit())
+                }
+                .foregroundStyle(.blue)
+                .help("\(count) background task\(count == 1 ? "" : "s") running")
+            }
             if let shortcutNumber {
                 Text("⌘\(shortcutNumber)")
                     .font(.caption)
@@ -54,6 +64,11 @@ struct ClaudeSessionRow: View {
         case .processing, .done: return .yellow
         case .awaitingInput: return .green
         }
+    }
+
+    private var runningTaskCount: Int? {
+        guard let id = session.viewModel.sessionId else { return nil }
+        return BackgroundTaskRegistry.shared.runningCount(forSessionId: id)
     }
 
     private var statusDot: some View {
