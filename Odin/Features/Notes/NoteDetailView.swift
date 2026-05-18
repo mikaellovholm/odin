@@ -64,8 +64,7 @@ struct NoteDetailView: View {
     }
 
     private var editorView: some View {
-        TextEditor(text: $note.content)
-            .font(.body.monospaced())
+        MarkdownTextEditor(text: $note.content)
             .padding(4)
     }
 
