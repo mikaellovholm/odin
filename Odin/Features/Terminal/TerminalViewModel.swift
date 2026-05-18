@@ -7,6 +7,11 @@ final class TerminalViewModel {
     private static let sshUsername = "mikael_lovholm_gmail_com"
     private static let sshPort = 22
 
+    /// Auto-reconnect schedule (seconds) for unexpected drops. Caps at 30 s so
+    /// the app keeps trying for as long as the user leaves the tab open
+    /// without hammering the Cloud Function while the VM is reprovisioning.
+    private static let reconnectBackoff: [TimeInterval] = [2, 5, 10, 20, 30]
+
     enum State: Equatable {
         case idle
         case checkingKey
@@ -15,6 +20,7 @@ final class TerminalViewModel {
         case connecting
         case connected
         case disconnected
+        case reconnecting(attempt: Int, retryIn: Int)
         case error(String)
     }
 
@@ -26,6 +32,12 @@ final class TerminalViewModel {
     private let sshService = SSHService()
     private(set) weak var terminalView: TerminalView?
     private var connectTask: Task<Void, Never>?
+    private var reconnectTask: Task<Void, Never>?
+    /// True when the user explicitly disconnected or cancelled — suppresses
+    /// auto-reconnect so a single tap on "Cancel" doesn't immediately trigger
+    /// another connection attempt.
+    private var userInitiatedDisconnect: Bool = false
+    private var reconnectAttempt: Int = 0
 
     func setTerminalView(_ tv: TerminalView) {
         terminalView = tv
@@ -38,9 +50,7 @@ final class TerminalViewModel {
                 },
                 onDisconnected: { [weak self] in
                     Task { @MainActor in
-                        if self?.state == .connected {
-                            self?.state = .disconnected
-                        }
+                        self?.handleUnexpectedDisconnect()
                     }
                 }
             )
@@ -48,6 +58,10 @@ final class TerminalViewModel {
     }
 
     func connect() {
+        userInitiatedDisconnect = false
+        reconnectAttempt = 0
+        reconnectTask?.cancel()
+        reconnectTask = nil
         connectTask?.cancel()
         connectTask = Task { await performConnect() }
     }
@@ -93,14 +107,63 @@ final class TerminalViewModel {
                 expectedHostKey: vmResult.hostKey
             )
             state = .connected
+            reconnectAttempt = 0
         } catch is CancellationError {
             return
         } catch {
-            state = .error("SSH failed: \(error.localizedDescription)")
+            // Skip the .error overlay if we're about to auto-reconnect — it
+            // would only flash for a split second before being replaced by
+            // the .reconnecting overlay. Show .error only when retries are
+            // suppressed (user-initiated disconnect/cancel).
+            if userInitiatedDisconnect {
+                state = .error("SSH failed: \(error.localizedDescription)")
+            } else {
+                scheduleAutoReconnect()
+            }
+        }
+    }
+
+    /// Called by the SSH service when the channel drops outside of an explicit
+    /// disconnect/cancel. tmux on the VM preserves the user's session, so a
+    /// silent reconnect just rejoins the same screen.
+    private func handleUnexpectedDisconnect() {
+        guard !userInitiatedDisconnect else { return }
+        guard state == .connected || isReconnectableState() else { return }
+        state = .disconnected
+        scheduleAutoReconnect()
+    }
+
+    private func isReconnectableState() -> Bool {
+        switch state {
+        case .connected, .disconnected, .reconnecting, .error:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func scheduleAutoReconnect() {
+        guard !userInitiatedDisconnect else { return }
+        let attempt = reconnectAttempt
+        let delay = Self.reconnectBackoff[min(attempt, Self.reconnectBackoff.count - 1)]
+        reconnectAttempt = attempt + 1
+        reconnectTask?.cancel()
+        reconnectTask = Task { @MainActor in
+            for remaining in stride(from: Int(delay), through: 1, by: -1) {
+                if Task.isCancelled || userInitiatedDisconnect { return }
+                state = .reconnecting(attempt: attempt + 1, retryIn: remaining)
+                try? await Task.sleep(for: .seconds(1))
+            }
+            if Task.isCancelled || userInitiatedDisconnect { return }
+            connectTask?.cancel()
+            connectTask = Task { await performConnect() }
         }
     }
 
     func cancelConnect() {
+        userInitiatedDisconnect = true
+        reconnectTask?.cancel()
+        reconnectTask = nil
         connectTask?.cancel()
         connectTask = nil
         state = .idle
@@ -135,6 +198,9 @@ final class TerminalViewModel {
     }
 
     func disconnect() {
+        userInitiatedDisconnect = true
+        reconnectTask?.cancel()
+        reconnectTask = nil
         connectTask?.cancel()
         connectTask = nil
         Task { await sshService.disconnect() }

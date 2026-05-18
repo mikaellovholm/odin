@@ -42,9 +42,12 @@ struct ClaudeSessionListView: View {
     }
 
     private var header: some View {
-        HStack {
+        HStack(spacing: 8) {
             Text("Claude Sessions")
                 .font(.headline)
+            if BackgroundTaskRegistry.shared.runningCount > 0 {
+                runningBadge(BackgroundTaskRegistry.shared.runningCount)
+            }
             Spacer()
             Button {
                 addSession()
@@ -57,6 +60,20 @@ struct ClaudeSessionListView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+    }
+
+    private func runningBadge(_ count: Int) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "bolt.fill")
+                .font(.caption2)
+            Text("\(count)")
+                .font(.caption.monospacedDigit())
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(Color.blue, in: Capsule())
+        .help("\(count) background task\(count == 1 ? "" : "s") running")
     }
 
     private var sessionList: some View {

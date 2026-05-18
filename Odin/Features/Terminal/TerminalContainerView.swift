@@ -4,6 +4,7 @@ struct TerminalContainerView: View {
     @Binding var selectedTab: AppTab
     @State private var viewModel = TerminalViewModel()
     @State private var keyboardDismissed = false
+    @AppStorage(TerminalFontSettings.key) private var fontSize: Double = Double(TerminalFontSettings.defaultSize)
     #if os(iOS)
     @State private var keyboardVisible = false
     #endif
@@ -82,8 +83,17 @@ struct TerminalContainerView: View {
         }
         .ignoresSafeArea(.container)
         .background(.black)
+        #if os(macOS)
+        .background(FontZoomShortcuts())
+        #endif
         #if os(iOS)
         .toolbar(viewModel.state == .connected ? .hidden : .visible, for: .tabBar)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if viewModel.state == .connected && keyboardVisible {
+                TerminalAccessoryBar(onSend: { viewModel.sendData($0) })
+                    .transition(.move(edge: .bottom))
+            }
+        }
         #endif
         #if os(iOS)
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
@@ -106,7 +116,7 @@ struct TerminalContainerView: View {
             onTerminalViewCreated: { viewModel.setTerminalView($0) },
             onDataSend: { viewModel.sendData($0) },
             onSizeChanged: { viewModel.resizeTerminal(cols: $0, rows: $1) },
-            fontSize: keyboardVisible ? 11 : 10,
+            fontSize: CGFloat(fontSize),
             isConnected: viewModel.state == .connected,
             keyboardDismissed: $keyboardDismissed
         )
@@ -115,6 +125,7 @@ struct TerminalContainerView: View {
             onTerminalViewCreated: { viewModel.setTerminalView($0) },
             onDataSend: { viewModel.sendData($0) },
             onSizeChanged: { viewModel.resizeTerminal(cols: $0, rows: $1) },
+            fontSize: CGFloat(fontSize),
             isConnected: viewModel.state == .connected,
             keyboardDismissed: $keyboardDismissed
         )
@@ -171,6 +182,21 @@ struct TerminalContainerView: View {
                     viewModel.connect()
                 }
                 .buttonStyle(.borderedProminent)
+            }
+
+        case .reconnecting(let attempt, let retryIn):
+            VStack(spacing: 16) {
+                ProgressView()
+                    .controlSize(.large)
+                Text("Reconnecting (attempt \(attempt))")
+                    .font(.headline)
+                Text("Retrying in \(retryIn)s")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("Cancel") {
+                    viewModel.cancelConnect()
+                }
+                .buttonStyle(.bordered)
             }
 
         case .error(let message):
