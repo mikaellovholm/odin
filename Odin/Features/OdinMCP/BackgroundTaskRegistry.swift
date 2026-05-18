@@ -2,6 +2,7 @@
 import Foundation
 
 @MainActor
+@Observable
 final class BackgroundTaskRegistry {
     static let shared = BackgroundTaskRegistry()
 
@@ -11,7 +12,12 @@ final class BackgroundTaskRegistry {
     /// stop unbounded memory growth from a long-lived session.
     private let maxRetained = 50
 
-    private var tasks: [String: BackgroundClaudeRunner] = [:]
+    private(set) var tasks: [String: BackgroundClaudeRunner] = [:]
+
+    /// Number of runners currently in the `.running` state. Maintained
+    /// incrementally so SwiftUI views observing the registry update the
+    /// moment a worker starts or finishes.
+    private(set) var runningCount: Int = 0
 
     private init() {}
 
@@ -30,8 +36,22 @@ final class BackgroundTaskRegistry {
             cwd: cwd,
             parentSessionId: parentSessionId
         )
+        runner.onFinish = { [weak self] _ in
+            guard let self else { return }
+            self.runningCount = max(self.runningCount - 1, 0)
+        }
+        // Start *before* registering so a spawn failure doesn't leave a
+        // zombie .running entry in the registry (with `runningCount` bumped
+        // forever). The runner only becomes visible once we know its process
+        // is alive.
+        do {
+            try runner.start(claudePath: claudePath)
+        } catch {
+            runner.onFinish = nil
+            throw error
+        }
         tasks[id] = runner
-        try runner.start(claudePath: claudePath)
+        runningCount += 1
         pruneIfNeeded()
         return runner
     }
@@ -42,6 +62,15 @@ final class BackgroundTaskRegistry {
 
     func all() -> [BackgroundClaudeRunner] {
         Array(tasks.values)
+    }
+
+    /// Count of in-flight runners spawned by the given Odin Claude session.
+    /// Tasks whose parent launch has been restarted (different session id) no
+    /// longer count toward that session.
+    func runningCount(forSessionId sessionId: String) -> Int {
+        tasks.values.reduce(0) { acc, runner in
+            (runner.state == .running && runner.parentSessionId == sessionId) ? acc + 1 : acc
+        }
     }
 
     private func pruneIfNeeded() {

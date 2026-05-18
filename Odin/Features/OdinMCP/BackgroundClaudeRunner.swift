@@ -22,6 +22,7 @@ enum OdinMCPError: Error, CustomStringConvertible {
 }
 
 @MainActor
+@Observable
 final class BackgroundClaudeRunner {
     enum State: Equatable {
         case running
@@ -35,10 +36,14 @@ final class BackgroundClaudeRunner {
     let parentSessionId: String?
     let createdAt: Date
 
+    /// Notified after the runner transitions out of `.running`. The registry
+    /// uses this to keep `runningCount` accurate without polling.
+    var onFinish: ((State) -> Void)?
+
     private(set) var state: State = .running
-    private var process: Process?
-    private var stdoutBuffer = Data()
-    private var stderrBuffer = Data()
+    @ObservationIgnored private var process: Process?
+    @ObservationIgnored private var stdoutBuffer = Data()
+    @ObservationIgnored private var stderrBuffer = Data()
 
     init(id: String, prompt: String, cwd: String, parentSessionId: String? = nil) {
         self.id = id
@@ -124,6 +129,7 @@ final class BackgroundClaudeRunner {
         }
         appendPendingNotification()
         pushBannerToParent()
+        onFinish?(state)
     }
 
     /// Push a UI banner into the parent Odin Claude tab so the user sees the
@@ -190,8 +196,11 @@ final class BackgroundClaudeRunner {
                 withIntermediateDirectories: true
             )
             if let data = body.data(using: .utf8) {
-                if FileManager.default.fileExists(atPath: file),
-                   let handle = try? FileHandle(forWritingTo: URL(fileURLWithPath: file)) {
+                if FileManager.default.fileExists(atPath: file) {
+                    // Append, but propagate FileHandle errors instead of
+                    // silently overwriting an existing pending file — that
+                    // would drop a previously-completed worker's result.
+                    let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: file))
                     defer { try? handle.close() }
                     try handle.seekToEnd()
                     try handle.write(contentsOf: data)
