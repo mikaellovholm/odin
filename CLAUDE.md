@@ -71,7 +71,7 @@ Lives in `Odin/Features/OdinMCP/`. Boots from `OdinApp.init` (macOS-only `Task {
 - **OdinMCPServer** — `@MainActor` singleton. `NWListener` on `127.0.0.1` with an ephemeral port (`requiredLocalEndpoint` + an application-layer endpoint check enforce loopback-only). Speaks MCP JSON-RPC 2.0 over HTTP at `POST /mcp`. Handles `initialize`, `notifications/initialized`, `tools/list`, `tools/call`, `ping`. Extracts `X-Session-Id` from request headers and stores it in `CurrentMCPRequest.sessionId` (a `@TaskLocal`) for the duration of each request.
 - **HTTPRequestParser** — minimal HTTP/1.1 head + Content-Length parser, one-shot per connection. Marked `@unchecked Sendable` because all access happens on the `.main` queue.
 - **OdinMCPTools** — three tools: `run_background_task(prompt, cwd?)` returns immediately with a `task_id`; `get_task_status(task_id)` is non-blocking; `await_task(task_id, timeout_seconds?)` blocks until done (avoid — it turns "background" into "synchronous" from the parent's perspective).
-- **BackgroundTaskRegistry** — `@MainActor` singleton keyed by `t-<8 hex>`. Never evicts (intentional — small enough that leaks aren't a near-term concern).
+- **BackgroundTaskRegistry** — `@MainActor` singleton keyed by `t-<8 hex>`. Soft cap of 50 retained runners: running tasks are never evicted; the oldest completed/failed entries fall off when the registry grows past the cap.
 - **BackgroundClaudeRunner** — wraps `Foundation.Process` to spawn `claude -p "<prompt>" --dangerously-skip-permissions`. Captures stdout/stderr through pipes. On exit: (a) writes a notification to `~/.claude/odin-pending/<parent_session_id>.txt` for the hook to drain on next user prompt; (b) pushes a `BackgroundNotification` into the parent tab's `LocalTerminalViewModel.pendingNotifications` so the sidebar indicator lights up.
 - **OdinSessionRegistry** — weakly maps per-launch `sessionId → LocalTerminalViewModel`. Read by `BackgroundClaudeRunner.pushBannerToParent` to find which Claude tab to notify.
 - **OdinSkillInstaller** — on app launch, writes `~/.claude/skills/odin-spawn/SKILL.md` and `~/.claude/skills/odin-orchestrate/SKILL.md`. Always overwrites, so source edits in this file propagate on relaunch. The skills teach Claude when and how to call the MCP tools (lead with the pull pattern — fire-and-forget, then check status on a later turn or rely on the auto-notification hook).
@@ -82,15 +82,15 @@ Lives in `Odin/Features/OdinMCP/`. Boots from `OdinApp.init` (macOS-only `Task {
 
 #### User-facing notification surface
 - **Sidebar checkmark** (`ClaudeSessionRow`): green `checkmark.circle.fill` when `pendingNotifications` is non-empty; otherwise the existing active-state green dot.
-- **Auto-dismiss on click**: `ClaudeSessionStore.select(_:)` calls `dismissAllBackgroundNotifications()`, so opening the session acknowledges all signals.
+- **Auto-dismiss on click**: `ClaudeSessionStore.select(_:)` snapshots the pending notifications visible at click time and dismisses only those, so a worker that completes between the click and a future MainActor tick gets its own row + checkmark instead of being silently cleared.
 - **Context injection on next user prompt**: the `UserPromptSubmit` hook drains the pending file and prints its contents to stdout, which Claude Code prepends to Claude's next turn — so Claude sees the result even after the sidebar signal has been cleared by the user opening the tab.
 
 #### Files written outside the repo (macOS only, on app launch)
 - `~/.claude/skills/odin-spawn/SKILL.md`, `~/.claude/skills/odin-orchestrate/SKILL.md` — always overwritten.
 - `~/.claude/hooks/odin-pending.sh` — always overwritten, chmod 755.
-- `~/.claude/settings.json` — hook entry merged in idempotently under `hooks.UserPromptSubmit`.
-- `~/.claude/odin-pending/<sessionId>.txt` — per-session pending notifications (drained by the hook). Stale files survive if the session was removed before its child task drained; they're harmless but accumulate.
-- `$TMPDIR/odin-mcp-<random>.json` — per-launch MCP config. Not cleaned up by Odin.
+- `~/.claude/settings.json` — hook entry merged in idempotently under `hooks.UserPromptSubmit` (atomic write).
+- `~/.claude/odin-pending/<sessionId>.txt` — per-session pending notifications (drained by the hook). Removed by `LocalTerminalViewModel.tearDownCurrentSession()` on session restart/terminate; stale files only survive if a worker writes one after teardown (harmless).
+- `$TMPDIR/odin-mcp-<random>.json` — per-launch MCP config. Removed by `LocalTerminalViewModel.tearDownCurrentSession()` on session restart/terminate.
 
 ### Cloud Function
 Source lives in `cloud-functions/claude-dev-starter/`. Node.js function deployed to GCP (`europe-north1`).

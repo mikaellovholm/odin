@@ -220,8 +220,6 @@ Give each Odin Claude tab an in-process MCP server that spawns headless `claude 
 **Notes:** Workers run with `--dangerously-skip-permissions` since there's no human to approve tool calls — scope prompts narrowly. The sidebar checkmark and the hook injection are complementary: the human sees the indicator the moment the task completes, and Claude sees the full result as context on the user's next turn. Files written outside the repo are listed in CLAUDE.md.
 
 **Not yet done:**
-- Task TTL / eviction in `BackgroundTaskRegistry` (currently grows unbounded)
-- Cleanup of `$TMPDIR/odin-mcp-*.json` configs and stale `~/.claude/odin-pending/*.txt` files
 - Surfacing in-flight task count anywhere in the UI
 
 ### Phase 4: Polish
