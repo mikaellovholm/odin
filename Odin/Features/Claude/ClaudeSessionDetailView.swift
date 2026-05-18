@@ -1,13 +1,14 @@
 #if os(macOS)
 import SwiftUI
 
-struct ClaudeTerminalContainerView: View {
-    @Bindable var viewModel: LocalTerminalViewModel
+struct ClaudeSessionDetailView: View {
+    let session: ClaudeSession
     @State private var keyboardDismissed = false
-    @State private var needsDirectorySelection = true
+
+    private var viewModel: LocalTerminalViewModel { session.viewModel }
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        ZStack {
             TerminalRepresentable(
                 onTerminalViewCreated: { viewModel.setTerminalView($0) },
                 onDataSend: { viewModel.sendData($0) },
@@ -18,58 +19,30 @@ struct ClaudeTerminalContainerView: View {
             )
             .opacity(viewModel.state == .running ? 1 : 0)
 
-            if needsDirectorySelection {
-                directoryPicker
-            } else if viewModel.state != .running {
+            if viewModel.state != .running {
                 stateOverlay
             }
-
         }
         .background(.black)
-        .ignoresSafeArea(.container)
+        .onAppear { focusTerminal() }
+        .onChange(of: viewModel.state) { _, newState in
+            if newState == .running { focusTerminal() }
+        }
     }
 
-    private var directoryPicker: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "folder")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
-
-            Text("Working Directory")
-                .font(.title2.bold())
-
-            Text(viewModel.workingDirectory)
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .padding(.horizontal)
-
-            HStack(spacing: 12) {
-                Button("Choose Folder...") {
-                    let panel = NSOpenPanel()
-                    panel.canChooseFiles = false
-                    panel.canChooseDirectories = true
-                    panel.allowsMultipleSelection = false
-                    panel.directoryURL = URL(fileURLWithPath: viewModel.workingDirectory)
-                    if panel.runModal() == .OK, let url = panel.url {
-                        viewModel.workingDirectory = url.path
-                    }
-                }
-                .buttonStyle(.bordered)
-
-                Button("Start Claude") {
-                    needsDirectorySelection = false
-                    viewModel.startClaude()
-                }
-                .buttonStyle(.borderedProminent)
-            }
+    private func focusTerminal() {
+        DispatchQueue.main.async {
+            guard let tv = viewModel.terminalView else { return }
+            tv.window?.makeFirstResponder(tv)
         }
     }
 
     @ViewBuilder
     private var stateOverlay: some View {
         switch viewModel.state {
+        case .notStarted:
+            ProgressView()
+
         case .starting:
             ProgressView("Starting Claude...")
 
@@ -89,7 +62,6 @@ struct ClaudeTerminalContainerView: View {
                         .foregroundStyle(.secondary)
                 }
                 Button("Restart") {
-                    needsDirectorySelection = true
                     viewModel.restart()
                 }
                 .buttonStyle(.borderedProminent)
@@ -108,7 +80,6 @@ struct ClaudeTerminalContainerView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
                 Button("Retry") {
-                    needsDirectorySelection = true
                     viewModel.restart()
                 }
                 .buttonStyle(.borderedProminent)
