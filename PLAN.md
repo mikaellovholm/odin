@@ -64,7 +64,11 @@ odin/
         APIKeyManager.swift          -- Cloud Function API key in Keychain
 
       Claude/                          -- macOS only (#if os(macOS))
-        ClaudeTerminalContainerView.swift -- SwiftUI view, reuses TerminalRepresentable
+        ClaudeSession.swift              -- Per-session model: id, dir, viewModel
+        ClaudeSessionStore.swift         -- Observable store (sessions, selection, persistence)
+        ClaudeSessionListView.swift      -- Claude tab: HSplitView sidebar + detail
+        ClaudeSessionRow.swift           -- Sidebar row (dot, name, ⌘N hint)
+        ClaudeSessionDetailView.swift    -- Terminal pane wrapping TerminalRepresentable
         LocalTerminalViewModel.swift     -- Spawns claude CLI via LocalProcess + PTY
 ```
 
@@ -175,6 +179,18 @@ GCP VM (claude-dev-vm, ephemeral IP from Cloud Function)
 6. ~~Handle terminal resize via TIOCSWINSZ ioctl on master PTY fd~~
 
 **Notes:** Requires `claude` CLI installed on the Mac. No SSH, Cloud Function, or API key needed — purely local. Files wrapped in `#if os(macOS)`, iOS compilation unaffected.
+
+### Phase 3c: Multi-session Claude (macOS only) — DONE
+Replaced the single-session UI with a sidebar + detail layout (see `multiple.md` for the original plan).
+1. ~~Add `.notStarted` to `LocalTerminalViewModel.State`; add `terminate()` and `didFinish`~~
+2. ~~Introduce `ClaudeSession` and `ClaudeSessionStore` (UserDefaults persistence of directories)~~
+3. ~~Build `ClaudeSessionListView` (HSplitView), `ClaudeSessionRow`, `ClaudeSessionDetailView`; replace `ClaudeTerminalContainerView`~~
+4. ~~`+` button opens `NSOpenPanel`, creates and selects a session; selection auto-starts Claude in that directory~~
+5. ~~Persist directories across launches; sessions return in `.notStarted` and start when first selected~~
+6. ~~⌘1…⌘9 shortcuts for the first nine sessions (hidden buttons with `keyboardShortcut`)~~
+7. ~~Clamp PTY winsize ints (`UInt16(clamping:)`) to handle transient zero/negative dims during HSplitView layout~~
+
+**Notes:** Switching sessions resets the visible scrollback (SwiftUI rebuilds `TerminalView` on `.id(session.id)`), but the underlying process keeps running. Removing a session sends SIGTERM via `LocalProcess.terminate()`.
 
 ### Phase 4: Polish
 - ~~App icon~~ (Norse god + ravens design)

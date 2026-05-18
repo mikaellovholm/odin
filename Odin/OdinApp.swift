@@ -4,6 +4,9 @@ import SwiftData
 @main
 struct OdinApp: App {
     let container: ModelContainer
+    #if os(macOS)
+    @State private var claudeSessionStore = ClaudeSessionStore()
+    #endif
 
     init() {
         do {
@@ -21,6 +24,10 @@ struct OdinApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+            #if os(macOS)
+                .environment(claudeSessionStore)
+                .task { claudeSessionStore.loadPersisted() }
+            #endif
         }
         .modelContainer(container)
     }

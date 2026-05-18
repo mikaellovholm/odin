@@ -9,10 +9,6 @@ enum AppTab: Hashable {
 
 struct ContentView: View {
     @State private var selectedTab: AppTab = .todos
-    #if os(macOS)
-    @State private var claudeViewModel = LocalTerminalViewModel()
-    @State private var claudeFinished = false
-    #endif
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -26,31 +22,10 @@ struct ContentView: View {
                 TerminalContainerView(selectedTab: $selectedTab)
             }
             #if os(macOS)
-            Tab(value: .claude) {
-                ClaudeTerminalContainerView(viewModel: claudeViewModel)
-            } label: {
-                let title = if claudeViewModel.isActive {
-                    "Claude ⬤"
-                } else if claudeFinished {
-                    "Claude ✓"
-                } else {
-                    "Claude"
-                }
-                Label(title, systemImage: "brain")
+            Tab("Claude", systemImage: "brain", value: .claude) {
+                ClaudeSessionListView()
             }
             #endif
         }
-        #if os(macOS)
-        .onChange(of: claudeViewModel.isActive) { old, new in
-            if old && !new {
-                claudeFinished = true
-            }
-        }
-        .onChange(of: selectedTab) {
-            if selectedTab == .claude {
-                claudeFinished = false
-            }
-        }
-        #endif
     }
 }
