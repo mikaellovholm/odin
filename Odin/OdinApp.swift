@@ -23,6 +23,7 @@ struct OdinApp: App {
         #if os(macOS)
         Task { @MainActor in
             OdinSkillInstaller.install()
+            OdinHookInstaller.install()
             do {
                 try OdinMCPServer.shared.start()
             } catch {

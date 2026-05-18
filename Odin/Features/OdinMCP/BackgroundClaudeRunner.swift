@@ -32,6 +32,7 @@ final class BackgroundClaudeRunner {
     let id: String
     let prompt: String
     let cwd: String
+    let parentSessionId: String?
     let createdAt: Date
 
     private(set) var state: State = .running
@@ -39,10 +40,11 @@ final class BackgroundClaudeRunner {
     private var stdoutBuffer = Data()
     private var stderrBuffer = Data()
 
-    init(id: String, prompt: String, cwd: String) {
+    init(id: String, prompt: String, cwd: String, parentSessionId: String? = nil) {
         self.id = id
         self.prompt = prompt
         self.cwd = cwd
+        self.parentSessionId = parentSessionId
         self.createdAt = Date()
     }
 
@@ -117,6 +119,86 @@ final class BackgroundClaudeRunner {
                 ? "claude exited with code \(exitCode)"
                 : "claude exited with code \(exitCode). stderr: \(stderrTail)"
             state = .failed(msg)
+        }
+        appendPendingNotification()
+        pushBannerToParent()
+    }
+
+    /// Push a UI banner into the parent Odin Claude tab so the user sees the
+    /// completion without prompting Claude first. Distinct from the pending
+    /// file: the banner is for the human, the file is for Claude's context.
+    private func pushBannerToParent() {
+        guard let sessionId = parentSessionId, !sessionId.isEmpty else { return }
+        guard let viewModel = OdinSessionRegistry.shared.viewModel(for: sessionId) else { return }
+        let preview: String
+        let kind: BackgroundNotification.Kind
+        switch state {
+        case .running:
+            return
+        case .completed(let result):
+            preview = String(result.prefix(200))
+                .replacingOccurrences(of: "\n", with: " ")
+            kind = .success
+        case .failed(let error):
+            preview = String(error.prefix(200))
+                .replacingOccurrences(of: "\n", with: " ")
+            kind = .failure
+        }
+        viewModel.addBackgroundNotification(
+            BackgroundNotification(taskId: id, kind: kind, preview: preview)
+        )
+    }
+
+    /// If the task was spawned by an identifiable Odin Claude tab, append a
+    /// notification to that tab's pending file so the UserPromptSubmit hook
+    /// can surface the result on the next user turn.
+    private func appendPendingNotification() {
+        guard let sessionId = parentSessionId, !sessionId.isEmpty else { return }
+        let dir = NSHomeDirectory() + "/.claude/odin-pending"
+        let file = dir + "/\(sessionId).txt"
+        let snippet = String(prompt.prefix(120)).replacingOccurrences(of: "\n", with: " ")
+        let body: String
+        switch state {
+        case .running:
+            return
+        case .completed(let result):
+            body = """
+            <odin-background-notification>
+            Task \(id) (prompt: "\(snippet)") completed.
+
+            Result:
+            \(result)
+            </odin-background-notification>
+
+            """
+        case .failed(let error):
+            body = """
+            <odin-background-notification>
+            Task \(id) (prompt: "\(snippet)") FAILED.
+
+            Error:
+            \(error)
+            </odin-background-notification>
+
+            """
+        }
+        do {
+            try FileManager.default.createDirectory(
+                atPath: dir,
+                withIntermediateDirectories: true
+            )
+            if let data = body.data(using: .utf8) {
+                if FileManager.default.fileExists(atPath: file),
+                   let handle = try? FileHandle(forWritingTo: URL(fileURLWithPath: file)) {
+                    defer { try? handle.close() }
+                    try handle.seekToEnd()
+                    try handle.write(contentsOf: data)
+                } else {
+                    try data.write(to: URL(fileURLWithPath: file))
+                }
+            }
+        } catch {
+            NSLog("[OdinMCP] failed to write pending notification: \(error)")
         }
     }
 

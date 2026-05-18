@@ -2,6 +2,18 @@
 import SwiftTerm
 import Foundation
 
+/// A completed (or failed) background task surfaced to the user via a banner
+/// above the terminal. Created by `BackgroundClaudeRunner.finish` and pushed
+/// into the matching `LocalTerminalViewModel.pendingNotifications`.
+struct BackgroundNotification: Identifiable, Equatable {
+    enum Kind: Equatable { case success, failure }
+
+    let id: UUID = UUID()
+    let taskId: String
+    let kind: Kind
+    let preview: String
+}
+
 @Observable
 @MainActor
 final class LocalTerminalViewModel {
@@ -17,6 +29,9 @@ final class LocalTerminalViewModel {
     var workingDirectory: String = NSHomeDirectory()
     var isActive: Bool = false
     var didFinish: Bool = false
+    var pendingNotifications: [BackgroundNotification] = []
+
+    private(set) var sessionId: String?
 
     private var process: LocalProcess?
     private var bridge: ProcessBridge?
@@ -32,9 +47,16 @@ final class LocalTerminalViewModel {
             return
         }
 
+        // Per-launch identity. Shared between the X-Session-Id MCP header
+        // (lets the server route background task completions back here) and
+        // the ODIN_SESSION_ID env var (read by the UserPromptSubmit hook).
+        let sessionId = "s-" + UUID().uuidString.prefix(8).lowercased()
+        self.sessionId = sessionId
+        OdinSessionRegistry.shared.register(self, for: sessionId)
+
         var args: [String] = []
         if let mcpURL = OdinMCPServer.shared.mcpURL,
-           let configPath = Self.writeMCPConfig(url: mcpURL) {
+           let configPath = Self.writeMCPConfig(url: mcpURL, sessionId: sessionId) {
             args.append(contentsOf: ["--mcp-config", configPath])
         }
 
@@ -66,7 +88,7 @@ final class LocalTerminalViewModel {
         proc.startProcess(
             executable: claudePath,
             args: args,
-            environment: Self.buildEnvironment(),
+            environment: Self.buildEnvironment(sessionId: sessionId),
             execName: nil,
             currentDirectory: workingDirectory
         )
@@ -107,10 +129,19 @@ final class LocalTerminalViewModel {
     }
 
     func terminate() {
+        if let oldId = sessionId {
+            OdinSessionRegistry.shared.unregister(oldId)
+        }
+        sessionId = nil
         process?.terminate()
     }
 
     func restart() {
+        if let oldId = sessionId {
+            OdinSessionRegistry.shared.unregister(oldId)
+        }
+        sessionId = nil
+        pendingNotifications.removeAll()
         process = nil
         bridge = nil
         didFinish = false
@@ -118,16 +149,35 @@ final class LocalTerminalViewModel {
         startClaude()
     }
 
+    // MARK: - Background notifications
+
+    func addBackgroundNotification(_ note: BackgroundNotification) {
+        pendingNotifications.append(note)
+    }
+
+    func dismissBackgroundNotification(id: UUID) {
+        pendingNotifications.removeAll { $0.id == id }
+    }
+
+    func dismissAllBackgroundNotifications() {
+        pendingNotifications.removeAll()
+    }
+
     // MARK: - MCP Config
 
     /// Writes a per-launch .mcp.json that points the spawned claude at Odin's
     /// in-process MCP server. Returns the temp file path, or nil on failure.
-    private static func writeMCPConfig(url: String) -> String? {
+    /// The X-Session-Id header lets the server identify which Odin tab made a
+    /// given tool call so background-task completions can be routed back.
+    private static func writeMCPConfig(url: String, sessionId: String) -> String? {
         let dict: [String: Any] = [
             "mcpServers": [
                 "odin": [
                     "type": "http",
-                    "url": url
+                    "url": url,
+                    "headers": [
+                        "X-Session-Id": sessionId
+                    ]
                 ]
             ]
         ]
@@ -145,10 +195,11 @@ final class LocalTerminalViewModel {
         }
     }
 
-    private static func buildEnvironment() -> [String] {
+    private static func buildEnvironment(sessionId: String) -> [String] {
         var env = ProcessInfo.processInfo.environment
         env["TERM"] = "xterm-256color"
         env["COLORTERM"] = "truecolor"
+        env["ODIN_SESSION_ID"] = sessionId
         if env["LANG"] == nil { env["LANG"] = "en_US.UTF-8" }
         return env.map { "\($0.key)=\($0.value)" }
     }

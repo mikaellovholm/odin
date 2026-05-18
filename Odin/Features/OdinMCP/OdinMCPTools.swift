@@ -74,7 +74,11 @@ enum OdinMCPTools {
             throw OdinMCPError.invalidArgument("prompt is required")
         }
         let cwd = (args["cwd"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? NSHomeDirectory()
-        let runner = try BackgroundTaskRegistry.shared.create(prompt: prompt, cwd: cwd)
+        let runner = try BackgroundTaskRegistry.shared.create(
+            prompt: prompt,
+            cwd: cwd,
+            parentSessionId: CurrentMCPRequest.sessionId
+        )
         return jsonString([
             "task_id": runner.id,
             "status": "running",

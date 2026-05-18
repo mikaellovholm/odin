@@ -37,6 +37,7 @@ final class ClaudeSessionStore {
             session.viewModel.startClaude()
         }
         session.viewModel.clearFinished()
+        session.viewModel.dismissAllBackgroundNotifications()
     }
 
     private func persist() {

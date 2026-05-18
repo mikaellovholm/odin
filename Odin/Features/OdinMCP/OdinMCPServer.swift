@@ -2,6 +2,13 @@
 import Foundation
 import Network
 
+/// Identifies the Odin Claude tab that originated the current MCP request.
+/// Set per-request from the X-Session-Id header so tool handlers can route
+/// completions back to the right session.
+enum CurrentMCPRequest {
+    @TaskLocal static var sessionId: String?
+}
+
 /// Local-only HTTP MCP server. Listens on 127.0.0.1 with an ephemeral port and
 /// speaks JSON-RPC 2.0 at POST /mcp. Spawned Claude sessions reach it via the
 /// per-session .mcp.json that LocalTerminalViewModel writes at launch.
@@ -103,7 +110,10 @@ final class OdinMCPServer {
         let id = json["id"]
         let method = json["method"] as? String ?? ""
         let params = json["params"] as? [String: Any] ?? [:]
-        await dispatch(method: method, params: params, id: id, on: connection)
+        let sessionId = request.headers["x-session-id"]
+        await CurrentMCPRequest.$sessionId.withValue(sessionId) {
+            await self.dispatch(method: method, params: params, id: id, on: connection)
+        }
     }
 
     private func dispatch(method: String, params: [String: Any], id: Any?, on connection: NWConnection) async {

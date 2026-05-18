@@ -22,9 +22,16 @@ struct ClaudeSessionRow: View {
 
     @ViewBuilder
     private var statusDot: some View {
-        Circle()
-            .fill(session.viewModel.isActive ? Color.green : .clear)
-            .frame(width: 8, height: 8)
+        if !session.viewModel.pendingNotifications.isEmpty {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 12))
+                .foregroundStyle(.green)
+                .frame(width: 12, height: 12)
+        } else {
+            Circle()
+                .fill(session.viewModel.isActive ? Color.green : .clear)
+                .frame(width: 8, height: 8)
+        }
     }
 }
 #endif

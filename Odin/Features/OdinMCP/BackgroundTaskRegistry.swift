@@ -9,12 +9,21 @@ final class BackgroundTaskRegistry {
 
     private init() {}
 
-    func create(prompt: String, cwd: String) throws -> BackgroundClaudeRunner {
+    func create(
+        prompt: String,
+        cwd: String,
+        parentSessionId: String? = nil
+    ) throws -> BackgroundClaudeRunner {
         guard let claudePath = ClaudePath.resolve() else {
             throw OdinMCPError.claudeNotFound
         }
         let id = "t-" + UUID().uuidString.prefix(8).lowercased()
-        let runner = BackgroundClaudeRunner(id: id, prompt: prompt, cwd: cwd)
+        let runner = BackgroundClaudeRunner(
+            id: id,
+            prompt: prompt,
+            cwd: cwd,
+            parentSessionId: parentSessionId
+        )
         tasks[id] = runner
         try runner.start(claudePath: claudePath)
         return runner
