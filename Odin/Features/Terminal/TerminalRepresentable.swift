@@ -20,6 +20,13 @@ struct TerminalRepresentable: UIViewRepresentable {
         tv.isOpaque = true
         tv.font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         tv.onTapped = { keyboardDismissed = false }
+        tv.onPinch = { factor in
+            let current = UserDefaults.standard.double(forKey: TerminalFontSettings.key)
+            let base = current > 0 ? current : Double(TerminalFontSettings.defaultSize)
+            let next = (base * Double(factor))
+                .clamped(to: Double(TerminalFontSettings.minSize)...Double(TerminalFontSettings.maxSize))
+            UserDefaults.standard.set(next, forKey: TerminalFontSettings.key)
+        }
         context.coordinator.terminalView = tv
         onTerminalViewCreated(tv)
         return tv
@@ -29,14 +36,19 @@ struct TerminalRepresentable: UIViewRepresentable {
         if isConnected && !keyboardDismissed && !uiView.isFirstResponder {
             uiView.becomeFirstResponder()
         }
-        let targetFont = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
-        if uiView.font.pointSize != fontSize {
-            uiView.font = targetFont
+        if abs(uiView.font.pointSize - fontSize) > 0.1 {
+            uiView.font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         }
     }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onDataSend: onDataSend, onSizeChanged: onSizeChanged, onTitleChanged: onTitleChanged)
+    }
+}
+
+private extension Double {
+    func clamped(to range: ClosedRange<Double>) -> Double {
+        min(max(self, range.lowerBound), range.upperBound)
     }
 }
 
@@ -49,7 +61,12 @@ class OdinTerminalView: TerminalView, UIGestureRecognizerDelegate {
     private var scrollAccumulator: CGFloat = 0
     private let pixelsPerScrollLine: CGFloat = 20
     private var wheelGesture: UIPanGestureRecognizer?
+    private var pinchGesture: UIPinchGestureRecognizer?
     var onTapped: (() -> Void)?
+    /// Called when the user pinches: passed the live scale factor (1.0 = no
+    /// change). The host saves an updated font size to UserDefaults so it
+    /// flows back through @AppStorage and resizes the terminal.
+    var onPinch: ((CGFloat) -> Void)?
 
     /// Ensure standard keyboard every time focus is acquired
     override func becomeFirstResponder() -> Bool {
@@ -67,6 +84,10 @@ class OdinTerminalView: TerminalView, UIGestureRecognizerDelegate {
         gesture.delegate = self
         wheelGesture = gesture
         addGestureRecognizer(gesture)
+        let pinch = UIPinchGestureRecognizer(target: self, action: #selector(handlePinch(_:)))
+        pinch.delegate = self
+        pinchGesture = pinch
+        addGestureRecognizer(pinch)
     }
 
     override func layoutSubviews() {
@@ -85,12 +106,21 @@ class OdinTerminalView: TerminalView, UIGestureRecognizerDelegate {
         return super.gestureRecognizerShouldBegin(gestureRecognizer)
     }
 
-    /// Allow our wheel gesture to run simultaneously with SwiftTerm's gestures.
+    /// Allow our wheel and pinch gestures to run simultaneously with SwiftTerm's gestures.
     func gestureRecognizer(
         _ gestureRecognizer: UIGestureRecognizer,
         shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
     ) -> Bool {
-        gestureRecognizer === wheelGesture
+        gestureRecognizer === wheelGesture || gestureRecognizer === pinchGesture
+    }
+
+    @objc private func handlePinch(_ gesture: UIPinchGestureRecognizer) {
+        // `.ended` would fire with `gesture.scale` already reset to 1 by the
+        // previous `.changed` event, so it's a no-op multiply — skip it.
+        if gesture.state == .changed {
+            onPinch?(gesture.scale)
+            gesture.scale = 1
+        }
     }
 
     @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
@@ -139,6 +169,7 @@ struct TerminalRepresentable: NSViewRepresentable {
     var onDataSend: (ArraySlice<UInt8>) -> Void
     var onSizeChanged: (Int, Int) -> Void
     var onTitleChanged: ((String) -> Void)?
+    var fontSize: CGFloat = 12
     var isConnected: Bool
     @Binding var keyboardDismissed: Bool
 
@@ -147,6 +178,10 @@ struct TerminalRepresentable: NSViewRepresentable {
         tv.terminalDelegate = context.coordinator
         tv.nativeBackgroundColor = .black
         tv.nativeForegroundColor = .white
+        if let monoFont = NSFont(name: "Menlo", size: fontSize)
+            ?? NSFont.userFixedPitchFont(ofSize: fontSize) {
+            tv.font = monoFont
+        }
         context.coordinator.terminalView = tv
         onTerminalViewCreated(tv)
         return tv
@@ -157,6 +192,11 @@ struct TerminalRepresentable: NSViewRepresentable {
             DispatchQueue.main.async {
                 nsView.window?.makeFirstResponder(nsView)
             }
+        }
+        if abs(nsView.font.pointSize - fontSize) > 0.1,
+           let monoFont = NSFont(name: nsView.font.fontName, size: fontSize)
+            ?? NSFont(name: "Menlo", size: fontSize) {
+            nsView.font = monoFont
         }
     }
 

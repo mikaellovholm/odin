@@ -45,9 +45,15 @@ enum VMStarterService {
         request.timeoutInterval = 30
         request.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
-            throw VMStarterError.httpError(statusCode: statusCode)
+        guard let http = response as? HTTPURLResponse else {
+            throw VMStarterError.httpError(statusCode: -1)
+        }
+        if http.statusCode == 429 {
+            let retryAfter = (http.value(forHTTPHeaderField: "Retry-After")).flatMap(Int.init)
+            throw VMStarterError.rateLimited(retryAfter: retryAfter)
+        }
+        guard http.statusCode == 200 else {
+            throw VMStarterError.httpError(statusCode: http.statusCode)
         }
         return try decoder.decode(VMResponse.self, from: data)
     }
@@ -57,13 +63,23 @@ enum VMStarterService {
         case timeout
         case missingAPIKey
         case missingHostKey
+        case rateLimited(retryAfter: Int?)
 
         var errorDescription: String? {
             switch self {
-            case .httpError(let code): "Cloud Function error (HTTP \(code))"
-            case .timeout: "VM did not become ready within 60 seconds"
-            case .missingAPIKey: "API key not configured. Set it in Terminal settings."
-            case .missingHostKey: "VM did not return SSH host key"
+            case .httpError(let code):
+                return "Cloud Function error (HTTP \(code))"
+            case .timeout:
+                return "VM did not become ready within 60 seconds"
+            case .missingAPIKey:
+                return "API key not configured. Set it in Terminal settings."
+            case .missingHostKey:
+                return "VM did not return SSH host key"
+            case .rateLimited(let retryAfter):
+                if let retryAfter {
+                    return "Too many VM starts. Try again in \(retryAfter)s."
+                }
+                return "Too many VM starts. Try again later."
             }
         }
     }
