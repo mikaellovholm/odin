@@ -14,7 +14,6 @@ struct ClaudeSessionDetailView: View {
                 onTerminalViewCreated: { viewModel.setTerminalView($0) },
                 onDataSend: { viewModel.sendData($0) },
                 onSizeChanged: { viewModel.resizeTerminal(cols: $0, rows: $1) },
-                onTitleChanged: { viewModel.handleTitleChanged($0) },
                 fontSize: CGFloat(fontSize),
                 isConnected: viewModel.state == .running,
                 keyboardDismissed: $keyboardDismissed
@@ -30,6 +29,14 @@ struct ClaudeSessionDetailView: View {
         .onAppear { focusTerminal() }
         .onChange(of: viewModel.state) { _, newState in
             if newState == .running { focusTerminal() }
+        }
+        .onChange(of: viewModel.didFinish) { _, didFinish in
+            // Being-watched counts as acknowledgement: clear the "just
+            // finished" yellow-stable flag immediately so switching to
+            // another session afterwards doesn't surface it as unseen work.
+            // (`awaitingInput` is deliberately not cleared here — the user
+            // hasn't actually responded to Claude yet just by looking.)
+            if didFinish { viewModel.acknowledge() }
         }
     }
 
