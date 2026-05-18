@@ -43,14 +43,16 @@ Each feature lives in `Odin/Features/<Name>/` with its own views and services. M
 ### Terminal Feature
 Uses SwiftTerm (terminal emulation) + Citadel (SSH) to connect to a GCP VM. Key components:
 
-- **TerminalContainerView** — orchestrates connection flow, overlay buttons (keyboard dismiss, navigate to Todos)
-- **TerminalRepresentable** — `UIViewRepresentable`/`NSViewRepresentable` wrapping SwiftTerm's `TerminalView`
-- **TerminalViewModel** — `@Observable` state machine (idle → checkingKey → setupRequired → startingVM → connecting → connected → disconnected → error)
-- **VMStarterService** — calls Cloud Function to start VM and get IP + SSH host key. Authenticates via `X-API-Key` header. Refuses to connect if host key is missing.
+- **TerminalContainerView** — orchestrates connection flow, overlay buttons (keyboard dismiss, navigate to Todos), mounts the iOS accessory bar via `.safeAreaInset` when the keyboard is up, applies `FontZoomShortcuts` on macOS
+- **TerminalRepresentable** — `UIViewRepresentable`/`NSViewRepresentable` wrapping SwiftTerm's `TerminalView`; the iOS variant adds a pinch recognizer that writes the new size through `@AppStorage(TerminalFontSettings.key)`
+- **TerminalAccessoryBar** (iOS) — SwiftUI bar with Esc/Tab/Ctrl/arrows/^C/^D/^Z/^L/^R; Ctrl is a sticky toggle. Implemented in SwiftUI because SwiftTerm's `TerminalView.inputAccessoryView` isn't open.
+- **TerminalFontSettings** / **FontZoomShortcuts** — persisted font size shared by both terminals. Cmd+= / Cmd+- / Cmd+0 on macOS; pinch on iOS; slider in Settings.
+- **TerminalViewModel** — `@Observable` state machine (idle → checkingKey → setupRequired → startingVM → connecting → connected → disconnected → reconnecting → error). Auto-reconnect with [2, 5, 10, 20, 30]s backoff on unexpected drops; user-initiated `cancelConnect`/`disconnect` suppresses it.
+- **VMStarterService** — calls Cloud Function to start VM and get IP + SSH host key. Authenticates via `X-API-Key` header. Refuses to connect if host key is missing. Maps the function's HTTP 429 (rate-limit) response to `VMStarterError.rateLimited(retryAfter:)`.
 - **SSHService** — Citadel SSH client with Ed25519 auth and mandatory host key verification via `.trustedKeys()`. The full OpenSSH key string (e.g. `ssh-ed25519 AAAA...`) is passed from the Cloud Function response.
-- **SSHKeyManager** — Ed25519 key generation and Keychain storage (`kSecAttrAccessibleWhenUnlockedThisDeviceOnly`)
+- **SSHKeyManager** — Ed25519 key generation and Keychain storage (`kSecAttrAccessibleWhenUnlockedThisDeviceOnly`). Optional biometric protection via `SecAccessControlCreateWithFlags(.biometryCurrentSet)`; `setBiometricProtection(_:)` re-stores the existing key without regenerating so the GCP-side public key stays valid. Toggled from Settings.
 - **APIKeyManager** — Stores the Cloud Function API key in Keychain. No secrets in source code. The setup screen prompts for the key on first use.
-- **OdinTerminalView** — iOS subclass of `TerminalView` adding mouse wheel events (SGR escape sequences for tmux scroll), tap-to-focus gesture, and UIScrollView pan blocking when mouse mode is active
+- **OdinTerminalView** — iOS subclass of `TerminalView` adding mouse wheel events (SGR escape sequences for tmux scroll), tap-to-focus gesture, pinch-to-zoom that updates `TerminalFontSettings`, and UIScrollView pan blocking when mouse mode is active
 
 ### Claude Terminal Feature (macOS only)
 Uses SwiftTerm's `LocalProcess` to spawn the Claude Code CLI in a local PTY — no SSH or Cloud Function needed. Lives in `Odin/Features/Claude/`. Guarded by `#if os(macOS)` so iOS compilation is unaffected.
@@ -92,8 +94,17 @@ Lives in `Odin/Features/OdinMCP/`. Boots from `OdinApp.init` (macOS-only `Task {
 - `~/.claude/odin-pending/<sessionId>.txt` — per-session pending notifications (drained by the hook). Removed by `LocalTerminalViewModel.tearDownCurrentSession()` on session restart/terminate; stale files only survive if a worker writes one after teardown (harmless).
 - `$TMPDIR/odin-mcp-<random>.json` — per-launch MCP config. Removed by `LocalTerminalViewModel.tearDownCurrentSession()` on session restart/terminate.
 
+### App-Level Glue
+
+- **OdinApp** owns `selectedTab` and the `ClaudeSessionStore` (macOS). Wraps `ContentView` in `ThemedContainer`. On macOS adds `CommandGroup(replacing: .newItem)` (New Todo / Note posting `.odinCreateNewTodo` / `.odinCreateNewNote` notifications), a `Go` `CommandMenu` (⌥⌘1…4 to switch tabs — chosen over ⌘1…9 to avoid colliding with the Claude tab's session shortcuts), and a `Settings` scene.
+- **SettingsView** — appearance (system/light/dark), accent color, terminal font slider, biometric SSH protection toggle. Available via ⌘, on macOS and a gear icon in the Todos toolbar on iOS.
+- **CloudKitSyncMonitor** — `@Observable` singleton observing `NSPersistentCloudKitContainer.eventChangedNotification`. `CloudKitSyncStatusView` is mounted in both list toolbars and lights up `exclamationmark.icloud.fill` when the last sync errored.
+- **MarkdownTextEditor** — UIViewRepresentable (UITextView) / NSViewRepresentable (NSTextView subclass) that intercepts ⌘B / ⌘I / ⌘K to wrap the current selection in `**…**` / `*…*` / `[text](url)`. Used in `NoteDetailView` instead of SwiftUI's `TextEditor` because the latter doesn't expose selection.
+
 ### Cloud Function
-Source lives in `cloud-functions/claude-dev-starter/`. Node.js function deployed to GCP (`europe-north1`).
+Source lives in `cloud-functions/claude-dev-starter/`. Node.js function deployed to GCP (`europe-north1`). In-memory rate limit: 10 cold starts per rolling hour per instance; returns HTTP 429 with `Retry-After` once the budget is spent (reads of `RUNNING` VMs are unbounded).
+
+
 
 ```bash
 # Deploy (requires gcloud CLI authenticated)
