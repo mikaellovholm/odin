@@ -154,7 +154,9 @@ struct TerminalRepresentable: NSViewRepresentable {
 
     func updateNSView(_ nsView: TerminalView, context: Context) {
         if isConnected {
-            nsView.window?.makeFirstResponder(nsView)
+            DispatchQueue.main.async {
+                nsView.window?.makeFirstResponder(nsView)
+            }
         }
     }
 

@@ -6,15 +6,17 @@ import Foundation
 @MainActor
 final class LocalTerminalViewModel {
     enum State: Equatable {
+        case notStarted
         case starting
         case running
         case exited(code: Int32?)
         case error(String)
     }
 
-    var state: State = .starting
+    var state: State = .notStarted
     var workingDirectory: String = NSHomeDirectory()
     var isActive: Bool = false
+    var didFinish: Bool = false
 
     private var process: LocalProcess?
     private var bridge: ProcessBridge?
@@ -44,10 +46,10 @@ final class LocalTerminalViewModel {
                 }
                 let terminal = tv.getTerminal()
                 return winsize(
-                    ws_row: UInt16(terminal.rows),
-                    ws_col: UInt16(terminal.cols),
-                    ws_xpixel: UInt16(tv.frame.width),
-                    ws_ypixel: UInt16(tv.frame.height)
+                    ws_row: UInt16(clamping: max(terminal.rows, 1)),
+                    ws_col: UInt16(clamping: max(terminal.cols, 1)),
+                    ws_xpixel: UInt16(clamping: Int(tv.frame.width)),
+                    ws_ypixel: UInt16(clamping: Int(tv.frame.height))
                 )
             }
         )
@@ -71,7 +73,9 @@ final class LocalTerminalViewModel {
 
     func resizeTerminal(cols: Int, rows: Int) {
         guard let process, process.running else { return }
-        var size = winsize(ws_row: UInt16(rows), ws_col: UInt16(cols), ws_xpixel: 0, ws_ypixel: 0)
+        let safeCols = UInt16(clamping: max(cols, 1))
+        let safeRows = UInt16(clamping: max(rows, 1))
+        var size = winsize(ws_row: safeRows, ws_col: safeCols, ws_xpixel: 0, ws_ypixel: 0)
         _ = ioctl(process.childfd, TIOCSWINSZ, &size)
     }
 
@@ -80,17 +84,30 @@ final class LocalTerminalViewModel {
     /// ⠂ (U+2802) / ⠐ (U+2810) = actively working
     func handleTitleChanged(_ title: String) {
         guard let first = title.first else { return }
+        let wasActive = isActive
         switch first {
         case "\u{2802}", "\u{2810}":
             isActive = true
         default:
             isActive = false
         }
+        if wasActive && !isActive {
+            didFinish = true
+        }
+    }
+
+    func clearFinished() {
+        didFinish = false
+    }
+
+    func terminate() {
+        process?.terminate()
     }
 
     func restart() {
         process = nil
         bridge = nil
+        didFinish = false
         terminalView?.getTerminal().resetToInitialState()
         startClaude()
     }
