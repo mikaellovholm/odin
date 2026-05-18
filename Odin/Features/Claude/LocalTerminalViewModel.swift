@@ -25,9 +25,15 @@ final class LocalTerminalViewModel {
     }
 
     func startClaude() {
-        guard let claudePath = Self.resolveClaudePath() else {
+        guard let claudePath = ClaudePath.resolve() else {
             state = .error("claude CLI not found.\nInstall with: npm install -g @anthropic-ai/claude-code")
             return
+        }
+
+        var args: [String] = []
+        if let mcpURL = OdinMCPServer.shared.mcpURL,
+           let configPath = Self.writeMCPConfig(url: mcpURL) {
+            args.append(contentsOf: ["--mcp-config", configPath])
         }
 
         let bridge = ProcessBridge(
@@ -57,7 +63,7 @@ final class LocalTerminalViewModel {
         process = proc
         proc.startProcess(
             executable: claudePath,
-            args: [],
+            args: args,
             environment: Self.buildEnvironment(),
             execName: nil,
             currentDirectory: workingDirectory
@@ -95,40 +101,31 @@ final class LocalTerminalViewModel {
         startClaude()
     }
 
-    // MARK: - Path Resolution
+    // MARK: - MCP Config
 
-    private static func resolveClaudePath() -> String? {
-        let knownPaths = [
-            "/usr/local/bin/claude",
-            "/opt/homebrew/bin/claude",
-            "\(NSHomeDirectory())/.local/bin/claude",
+    /// Writes a per-launch .mcp.json that points the spawned claude at Odin's
+    /// in-process MCP server. Returns the temp file path, or nil on failure.
+    private static func writeMCPConfig(url: String) -> String? {
+        let dict: [String: Any] = [
+            "mcpServers": [
+                "odin": [
+                    "type": "http",
+                    "url": url
+                ]
+            ]
         ]
-        for path in knownPaths {
-            if FileManager.default.isExecutableFile(atPath: path) {
-                return path
-            }
-        }
-
-        // Fall back to login shell to resolve PATH (handles nvm, homebrew, etc.)
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        proc.arguments = ["-lc", "which claude"]
-        let pipe = Pipe()
-        proc.standardOutput = pipe
-        proc.standardError = FileHandle.nullDevice
+        guard let data = try? JSONSerialization.data(
+            withJSONObject: dict,
+            options: [.prettyPrinted]
+        ) else { return nil }
+        let suffix = UUID().uuidString.prefix(8).lowercased()
+        let path = NSTemporaryDirectory() + "odin-mcp-\(suffix).json"
         do {
-            try proc.run()
-            proc.waitUntilExit()
-            guard proc.terminationStatus == 0 else { return nil }
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let path = String(data: data, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-               !path.isEmpty,
-               FileManager.default.isExecutableFile(atPath: path) {
-                return path
-            }
-        } catch {}
-        return nil
+            try data.write(to: URL(fileURLWithPath: path))
+            return path
+        } catch {
+            return nil
+        }
     }
 
     private static func buildEnvironment() -> [String] {
