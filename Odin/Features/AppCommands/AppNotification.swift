@@ -5,4 +5,5 @@ import Foundation
 extension Notification.Name {
     static let odinCreateNewTodo = Notification.Name("odin.createNewTodo")
     static let odinCreateNewNote = Notification.Name("odin.createNewNote")
+    static let odinCreateNewClaudeSession = Notification.Name("odin.createNewClaudeSession")
 }
