@@ -11,18 +11,8 @@ struct ClaudeSessionRow: View {
             statusDot
             Text(session.displayName)
                 .font(.body)
-            if !session.viewModel.pendingNotifications.isEmpty {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.green)
-                    .frame(width: 12, height: 12)
-            }
             Spacer()
-            if let count = runningTaskCount, count > 0 {
-                Text("🤔")
-                    .font(.caption)
-                    .help("\(count) background task\(count == 1 ? "" : "s") running")
-            }
+            activityIndicator
             if let shortcutNumber {
                 Text("⌘\(shortcutNumber)")
                     .font(.caption)
@@ -30,6 +20,20 @@ struct ClaudeSessionRow: View {
             }
         }
         .padding(.vertical, 2)
+    }
+
+    @ViewBuilder
+    private var activityIndicator: some View {
+        if !session.viewModel.pendingNotifications.isEmpty {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 12))
+                .foregroundStyle(.green)
+                .frame(width: 12, height: 12)
+        } else if let count = runningTaskCount, count > 0 {
+            Text("🤔")
+                .font(.caption)
+                .help("\(count) background task\(count == 1 ? "" : "s") running")
+        }
     }
 
     private enum SessionStatus {

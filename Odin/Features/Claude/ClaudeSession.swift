@@ -12,6 +12,9 @@ final class ClaudeSession: Identifiable {
     /// (same pattern as `viewModel`). Holds the FSEvents watcher + file list +
     /// currently-loaded diff for this session's worktree.
     let diffViewModel: DiffViewModel
+    /// Bottom shell pane (⇧⌘T). Survives detail-view rebuilds so the zsh
+    /// process keeps running across session switches.
+    let shellViewModel: ShellTerminalViewModel
 
     init(workingDirectory: String, id: UUID = UUID()) {
         self.id = id
@@ -21,6 +24,9 @@ final class ClaudeSession: Identifiable {
         vm.workingDirectory = workingDirectory
         self.viewModel = vm
         self.diffViewModel = DiffViewModel(workingDirectory: workingDirectory)
+        let shell = ShellTerminalViewModel()
+        shell.workingDirectory = workingDirectory
+        self.shellViewModel = shell
     }
 }
 #endif
