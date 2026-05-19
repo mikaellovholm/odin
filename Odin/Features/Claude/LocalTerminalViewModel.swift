@@ -116,9 +116,16 @@ final class LocalTerminalViewModel {
 
         let proc = LocalProcess(delegate: bridge, dispatchQueue: .main)
         process = proc
+        // GUI apps inherit PATH from launchd, which doesn't source ~/.zshrc, so
+        // claude (and anything it shells out to) would see a bare PATH. Spawn
+        // through a login shell so the user's normal PATH (incl. ~/.local/bin,
+        // /opt/homebrew/bin, nvm, etc.) is in place when claude starts.
+        // `exec "$@"` replaces zsh with claude so the child PID is claude
+        // itself — terminate()/heartbeat behaviour is unchanged.
+        let shellArgs = ["-lc", "exec \"$@\"", "zsh", claudePath] + args
         proc.startProcess(
-            executable: claudePath,
-            args: args,
+            executable: "/bin/zsh",
+            args: shellArgs,
             environment: Self.buildEnvironment(sessionId: sessionId),
             execName: nil,
             currentDirectory: workingDirectory
