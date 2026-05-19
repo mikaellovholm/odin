@@ -130,32 +130,57 @@ enum OdinMCPTools {
             ]
         ],
         [
+            "name": "get_review_run",
+            "description": """
+            Read back the current state of a review run — concerns + statuses, all submitted findings, and \
+            fix-worker results. Call this when the user asks about a specific finding ("explain the blocker", \
+            "what did security flag", "which findings are still open"). When called with no `review_id`, \
+            returns the latest review run for your tab (the X-Session-Id header). Do NOT call this proactively \
+            after dispatching reviewers — the review pane already shows findings live; only fetch when the user \
+            asks a question.
+            """,
+            "inputSchema": [
+                "type": "object",
+                "properties": [
+                    "review_id": [
+                        "type": "string",
+                        "description": "Optional. Id returned by start_review_run. Omit to get the latest run for this tab."
+                    ]
+                ],
+                "required": []
+            ]
+        ],
+        [
             "name": "submit_fix_result",
             "description": """
             Called by a Phase-2 fix worker when it's done editing. The review_id and task_id are \
-            read from MCP headers. Findings the worker fixed go in `applied` by finding title; \
-            findings deliberately not touched go in `skipped` with a reason. Findings the worker \
-            doesn't mention will be surfaced as failed in the panel.
+            read from MCP headers. Findings the worker fixed go in `applied` by finding_id; findings \
+            deliberately not touched go in `skipped` with a reason. Findings the worker doesn't \
+            mention will be surfaced as failed in the panel. Ids outside the worker's scope are \
+            ignored — you can only flip findings you were dispatched for.
             """,
             "inputSchema": [
                 "type": "object",
                 "properties": [
                     "applied": [
                         "type": "array",
-                        "items": ["type": "string"],
-                        "description": "Titles of findings the worker actually fixed in this run."
+                        "items": [
+                            "type": "string",
+                            "description": "A finding id, e.g. 'f-abcd1234'."
+                        ],
+                        "description": "Finding ids (the `id` field from each finding in your prompt) that the worker actually fixed in this run."
                     ],
                     "skipped": [
                         "type": "array",
                         "items": [
                             "type": "object",
                             "properties": [
-                                "title":  ["type": "string"],
-                                "reason": ["type": "string"]
+                                "finding_id": ["type": "string"],
+                                "reason":     ["type": "string"]
                             ],
-                            "required": ["title", "reason"]
+                            "required": ["finding_id", "reason"]
                         ],
-                        "description": "Findings the worker deliberately did not apply (false positive, needs human, etc.)."
+                        "description": "Findings the worker deliberately did not apply (false positive, needs human, etc.). Use the `id` field, not the title."
                     ],
                     "notes": ["type": "string", "description": "Optional free-form note shown alongside the fix worker's status."]
                 ],
@@ -181,6 +206,8 @@ enum OdinMCPTools {
             return try completeReviewWorker(args)
         case "submit_fix_result":
             return try submitFixResult(args)
+        case "get_review_run":
+            return try getReviewRun(args)
         default:
             throw OdinMCPError.invalidArgument("unknown tool: \(name)")
         }
@@ -343,6 +370,130 @@ enum OdinMCPTools {
     }
 
     @MainActor
+    private static func getReviewRun(_ args: [String: Any]) throws -> String {
+        let explicitId = (args["review_id"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        let run: ReviewRun?
+        if let explicitId {
+            run = ReviewRunRegistry.shared.get(explicitId)
+        } else if let sid = CurrentMCPRequest.sessionId, !sid.isEmpty {
+            run = ReviewRunRegistry.shared.latestRun(forSessionId: sid)
+        } else {
+            run = nil
+        }
+        guard let run else {
+            return jsonString([
+                "review_id": NSNull(),
+                "message": "no review run found"
+            ])
+        }
+        return jsonString(serialize(run: run))
+    }
+
+    /// Shared ISO-8601 formatter for `get_review_run` payloads. `ISO8601DateFormatter`
+    /// is documented thread-safe for formatting; hoisting it here saves the per-call
+    /// allocation in `serialize(run:)`, which can fire on every user question about
+    /// a long-running review.
+    private static let isoFormatter = ISO8601DateFormatter()
+
+    @MainActor
+    private static func serialize(run: ReviewRun) -> [String: Any] {
+        let iso = OdinMCPTools.isoFormatter
+        let concerns: [[String: Any]] = run.concerns.map { concern in
+            var dict: [String: Any] = ["name": concern.name]
+            switch concern.status {
+            case .pending:
+                dict["status"] = "pending"
+            case .running(let taskId):
+                dict["status"] = "running"
+                dict["task_id"] = taskId
+            case .completed(let taskId):
+                dict["status"] = "completed"
+                dict["task_id"] = taskId
+            case .failed(let taskId, let message):
+                dict["status"] = "failed"
+                dict["task_id"] = taskId
+                dict["error"] = message
+            }
+            if let summary = concern.summary {
+                dict["summary"] = summary
+            }
+            return dict
+        }
+        let findings: [[String: Any]] = run.findings.map { f in
+            var dict: [String: Any] = [
+                "id": f.id,
+                "file": f.file,
+                "severity": f.severity.rawValue,
+                "concern": f.concern,
+                "title": f.title,
+                "detail": f.detail,
+                "fixable": f.fixable,
+                "created_at": iso.string(from: f.createdAt)
+            ]
+            if let line = f.line {
+                dict["line"] = line
+            }
+            if let suggestion = f.suggestion {
+                dict["suggestion"] = suggestion
+            }
+            switch f.fixState {
+            case .none:
+                dict["fix_state"] = "none"
+            case .queued:
+                dict["fix_state"] = "queued"
+            case .running(let taskId):
+                dict["fix_state"] = "running"
+                dict["fix_task_id"] = taskId
+            case .applied:
+                dict["fix_state"] = "applied"
+            case .skipped(let reason):
+                dict["fix_state"] = "skipped"
+                dict["fix_state_reason"] = reason
+            case .failed(let message):
+                dict["fix_state"] = "failed"
+                dict["fix_state_reason"] = message
+            }
+            return dict
+        }
+        let fixes: [[String: Any]] = run.fixes.map { fix in
+            var dict: [String: Any] = [
+                "task_id": fix.id,
+                "file": fix.file,
+                "finding_ids": fix.findingIds,
+                "created_at": iso.string(from: fix.createdAt)
+            ]
+            if let outcome = fix.outcome {
+                var outDict: [String: Any] = [
+                    "applied": outcome.applied,
+                    "skipped": outcome.skipped.map { ["finding_id": $0.findingId, "reason": $0.reason] }
+                ]
+                if let notes = outcome.notes {
+                    outDict["notes"] = notes
+                }
+                dict["outcome"] = outDict
+            }
+            if let error = fix.error {
+                dict["error"] = error
+            }
+            return dict
+        }
+        var result: [String: Any] = [
+            "review_id": run.id,
+            "created_at": iso.string(from: run.createdAt),
+            "concerns": concerns,
+            "findings": findings,
+            "fixes": fixes
+        ]
+        if let stat = run.diffStat {
+            result["diff_stat"] = stat
+        }
+        if let pid = run.parentSessionId {
+            result["parent_session_id"] = pid
+        }
+        return result
+    }
+
+    @MainActor
     private static func submitFixResult(_ args: [String: Any]) throws -> String {
         guard let reviewId = CurrentMCPRequest.reviewId, !reviewId.isEmpty else {
             throw OdinMCPError.invalidArgument("submit_fix_result requires X-Review-Id header")
@@ -355,10 +506,14 @@ enum OdinMCPTools {
         let skippedRaw = (args["skipped"] as? [Any]) ?? []
         let skipped: [FixWorkerOutcome.Skip] = skippedRaw.compactMap { item in
             guard let dict = item as? [String: Any],
-                  let title = dict["title"] as? String, !title.isEmpty,
                   let reason = dict["reason"] as? String, !reason.isEmpty
             else { return nil }
-            return FixWorkerOutcome.Skip(title: title, reason: reason)
+            // Accept `finding_id` (the new shape) and `id` as a forgiving
+            // alias — a worker that mis-keys to `id` shouldn't silently drop
+            // the skip.
+            let idCandidate = (dict["finding_id"] as? String) ?? (dict["id"] as? String)
+            guard let findingId = idCandidate, !findingId.isEmpty else { return nil }
+            return FixWorkerOutcome.Skip(findingId: findingId, reason: reason)
         }
         let notes = (args["notes"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         ReviewRunRegistry.shared.recordFixOutcome(

@@ -242,6 +242,12 @@ enum OdinSkillInstaller {
     - **performance** — Hot-path allocations, N+1, sync I/O on main, missing caching when there's an obvious key.
     - **api-compat** — Breaking changes to public types, removed/renamed exports, schema fields, JSON shape. Almost always `fixable: false` — needs human call.
 
+    ## Reading findings back
+
+    The panel shows findings live. You usually shouldn't talk about them at all. But if the user asks a specific question — *"explain the security blocker"*, *"what did the style reviewer find"*, *"is the api-compat one fixable"* — call `mcp__odin__get_review_run` (no args; it uses your tab's `X-Session-Id` to find the latest run). The response carries every concern's status, every finding (id, file, line, severity, concern, title, detail, suggestion, fixable, fix_state), and every fix worker's outcome. Answer the user's question from that data; don't dump the whole JSON back at them.
+
+    Do NOT call `get_review_run` proactively after dispatch — the panel is the surface and the user is already looking at it. Only fetch when the user asks something you can't answer without it.
+
     ## Fixes are panel-driven
 
     Do NOT spawn fix workers from this skill. After Phase 1 dispatch, point the user at the review pane (⇧⌘R) and let them click `Fix` on individual findings or `Fix all blockers` / `Fix all auto-fixable` in bulk. Odin spawns the fix workers internally, scopes each one to a single file, gives it `mcp__odin__submit_fix_result` access, and surfaces the applied/skipped state per finding in the panel.
