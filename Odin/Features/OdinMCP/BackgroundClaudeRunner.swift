@@ -35,6 +35,10 @@ final class BackgroundClaudeRunner {
     let cwd: String
     let parentSessionId: String?
     let model: String?
+    /// When set, the worker gets a `--mcp-config` pointing at OdinMCP with
+    /// review-routing headers, and the runner auto-resolves the corresponding
+    /// concern / fix worker in `ReviewRunRegistry` on exit.
+    let reviewContext: ReviewWorkerContext?
     let createdAt: Date
 
     /// Notified after the runner transitions out of `.running`. The registry
@@ -45,19 +49,24 @@ final class BackgroundClaudeRunner {
     @ObservationIgnored private var process: Process?
     @ObservationIgnored private var stdoutBuffer = Data()
     @ObservationIgnored private var stderrBuffer = Data()
+    /// Per-worker `.mcp.json` in $TMPDIR. Written in `start` when `reviewContext`
+    /// is set, deleted in `finish`.
+    @ObservationIgnored private var mcpConfigPath: String?
 
     init(
         id: String,
         prompt: String,
         cwd: String,
         parentSessionId: String? = nil,
-        model: String? = nil
+        model: String? = nil,
+        reviewContext: ReviewWorkerContext? = nil
     ) {
         self.id = id
         self.prompt = prompt
         self.cwd = cwd
         self.parentSessionId = parentSessionId
         self.model = model
+        self.reviewContext = reviewContext
         self.createdAt = Date()
     }
 
@@ -70,6 +79,18 @@ final class BackgroundClaudeRunner {
         ]
         if let model, !model.isEmpty {
             args.append(contentsOf: ["--model", model])
+        }
+        // Review workers reach back into Odin via a per-worker .mcp.json. Plain
+        // background tasks (no reviewContext) skip this — they don't need to
+        // call submit_finding/submit_fix_result and we avoid expanding the
+        // attack surface for prompts that have no business calling back.
+        if let configPath = Self.writeMCPConfigIfNeeded(
+            parentSessionId: parentSessionId,
+            taskId: id,
+            reviewContext: reviewContext
+        ) {
+            args.append(contentsOf: ["--mcp-config", configPath])
+            mcpConfigPath = configPath
         }
         p.arguments = args
         p.currentDirectoryURL = URL(fileURLWithPath: cwd)
@@ -128,6 +149,10 @@ final class BackgroundClaudeRunner {
         stdoutBuffer = Data()
         stderrBuffer = Data()
         process = nil
+        if let path = mcpConfigPath {
+            try? FileManager.default.removeItem(atPath: path)
+            mcpConfigPath = nil
+        }
         let trimmed = stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
         if exitCode == 0 {
             state = .completed(trimmed)
@@ -139,9 +164,92 @@ final class BackgroundClaudeRunner {
                 : "claude exited with code \(exitCode). stderr: \(stderrTail)"
             state = .failed(msg)
         }
+        autoResolveReviewContext(exitCode: exitCode, stderrTail: stderrText)
         appendPendingNotification()
         pushBannerToParent()
         onFinish?(state)
+    }
+
+    /// If this runner was spawned as a Phase-1 reviewer or Phase-2 fixer,
+    /// poke `ReviewRunRegistry` so the panel stops showing the worker as
+    /// in-flight. The registry's auto-resolve methods are idempotent and never
+    /// downgrade a self-reported terminal state — see their docs.
+    private func autoResolveReviewContext(exitCode: Int32, stderrTail: String) {
+        guard let ctx = reviewContext else { return }
+        let success = exitCode == 0
+        let message: String? = success
+            ? nil
+            : {
+                let tail = String(stderrTail.suffix(500))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return tail.isEmpty
+                    ? "worker exited with code \(exitCode)"
+                    : "worker exited with code \(exitCode): \(tail)"
+            }()
+        switch ctx.role {
+        case .reviewer(let concern):
+            ReviewRunRegistry.shared.autoResolveReviewerOnExit(
+                reviewId: ctx.reviewId,
+                concern: concern,
+                taskId: id,
+                success: success,
+                message: message
+            )
+        case .fixer:
+            ReviewRunRegistry.shared.autoResolveFixerOnExit(
+                reviewId: ctx.reviewId,
+                taskId: id,
+                success: success,
+                message: message
+            )
+        }
+    }
+
+    /// Writes a per-worker `.mcp.json` to $TMPDIR with the headers OdinMCP
+    /// reads to route review tool calls. Returns nil for non-review workers,
+    /// when the parent session id is missing (we can't route without it), or
+    /// when the OdinMCP server isn't listening yet — in any of those cases
+    /// the worker just runs without MCP access.
+    private static func writeMCPConfigIfNeeded(
+        parentSessionId: String?,
+        taskId: String,
+        reviewContext: ReviewWorkerContext?
+    ) -> String? {
+        guard let context = reviewContext else { return nil }
+        guard let parentSessionId, !parentSessionId.isEmpty else { return nil }
+        guard let url = OdinMCPServer.shared.mcpURL else { return nil }
+        var headers: [String: String] = [
+            "X-Session-Id": parentSessionId,
+            "X-Task-Id": taskId,
+            "X-Review-Id": context.reviewId
+        ]
+        switch context.role {
+        case .reviewer(let concern):
+            headers["X-Concern"] = concern
+        case .fixer(let file):
+            headers["X-Fix-File"] = file
+        }
+        let dict: [String: Any] = [
+            "mcpServers": [
+                "odin": [
+                    "type": "http",
+                    "url": url,
+                    "headers": headers
+                ]
+            ]
+        ]
+        guard let data = try? JSONSerialization.data(
+            withJSONObject: dict,
+            options: [.prettyPrinted]
+        ) else { return nil }
+        let suffix = UUID().uuidString.prefix(8).lowercased()
+        let path = NSTemporaryDirectory() + "odin-mcp-worker-\(suffix).json"
+        do {
+            try data.write(to: URL(fileURLWithPath: path))
+            return path
+        } catch {
+            return nil
+        }
     }
 
     /// Push a UI banner into the parent Odin Claude tab so the user sees the

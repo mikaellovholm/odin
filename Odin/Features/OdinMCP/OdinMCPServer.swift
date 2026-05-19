@@ -2,11 +2,21 @@
 import Foundation
 import Network
 
-/// Identifies the Odin Claude tab that originated the current MCP request.
-/// Set per-request from the X-Session-Id header so tool handlers can route
-/// completions back to the right session.
+/// Per-request identity for the current MCP call. All fields come from request
+/// headers set by the spawned worker's .mcp.json (or the parent tab's, for the
+/// orchestrator's own calls). Tool handlers read these task-locals instead of
+/// requiring every tool argument to repeat the same routing fields.
 enum CurrentMCPRequest {
+    /// `X-Session-Id`. Identifies the Odin Claude tab. Always set.
     @TaskLocal static var sessionId: String?
+    /// `X-Review-Id`. Set only for workers spawned as part of a review run —
+    /// review/fix workers see this; the parent tab does not.
+    @TaskLocal static var reviewId: String?
+    /// `X-Concern`. Set for Phase-1 review workers (one concern per worker).
+    @TaskLocal static var concern: String?
+    /// `X-Task-Id`. The runner's own task id. Lets fix workers self-identify
+    /// when calling submit_fix_result without having to pass it explicitly.
+    @TaskLocal static var taskId: String?
 }
 
 /// Local-only HTTP MCP server. Listens on 127.0.0.1 with an ephemeral port and
@@ -117,8 +127,17 @@ final class OdinMCPServer {
         let method = json["method"] as? String ?? ""
         let params = json["params"] as? [String: Any] ?? [:]
         let sessionId = request.headers["x-session-id"]
+        let reviewId = request.headers["x-review-id"]
+        let concern = request.headers["x-concern"]
+        let taskId = request.headers["x-task-id"]
         await CurrentMCPRequest.$sessionId.withValue(sessionId) {
-            await self.dispatch(method: method, params: params, id: id, on: connection)
+            await CurrentMCPRequest.$reviewId.withValue(reviewId) {
+                await CurrentMCPRequest.$concern.withValue(concern) {
+                    await CurrentMCPRequest.$taskId.withValue(taskId) {
+                        await self.dispatch(method: method, params: params, id: id, on: connection)
+                    }
+                }
+            }
         }
     }
 

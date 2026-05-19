@@ -47,17 +47,18 @@ struct ClaudeSessionListView: View {
     }
 
     private var shortcutHints: some View {
-        VStack(spacing: 4) {
-            shortcutHintRow("New session", shortcut: "⌘N")
-            shortcutHintRow("Diff pane", shortcut: "⇧⌘D")
-            shortcutHintRow("Terminal pane", shortcut: "⇧⌘T")
+        VStack(alignment: .leading, spacing: 4) {
+            shortcutRow(label: "New session", shortcut: "⌘N")
+            shortcutRow(label: "Diff pane", shortcut: "⇧⌘D")
+            shortcutRow(label: "Review pane", shortcut: "⇧⌘R")
+            shortcutRow(label: "Terminal pane", shortcut: "⇧⌘T")
         }
         .font(.caption)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
     }
 
-    private func shortcutHintRow(_ label: String, shortcut: String) -> some View {
+    private func shortcutRow(label: String, shortcut: String) -> some View {
         HStack {
             Text(label)
                 .foregroundStyle(.secondary)
