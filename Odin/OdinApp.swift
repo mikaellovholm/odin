@@ -24,6 +24,14 @@ struct OdinApp: App {
         }
 
         #if os(macOS)
+        // Migrate any pre-existing `claude.diffPaneVisible` Bool to the new
+        // `claude.rightPaneMode` enum so users who explicitly hid the diff
+        // pane don't get reset to `.diff` on first run. Runs synchronously
+        // before SwiftUI ever reads the AppStorage key — otherwise the very
+        // first view evaluation could read the default `.diff` and then flip
+        // to `.hidden` a tick later once the async task fires.
+        RightPaneMode.migrateLegacyKeyIfNeeded()
+
         Task { @MainActor in
             OdinSkillInstaller.install()
             OdinHookInstaller.install()

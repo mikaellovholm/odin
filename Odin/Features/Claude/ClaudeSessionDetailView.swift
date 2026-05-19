@@ -11,7 +11,7 @@ struct ClaudeSessionDetailView: View {
     /// "separate toggleable pane" in the planning Q&A). New default is `.diff`
     /// to match the previous `diffPaneVisible: true` default; users who toggled
     /// the old key lose that preference but land on the same state.
-    @AppStorage("claude.rightPaneMode") private var rightPaneMode: RightPaneMode = .diff
+    @AppStorage(RightPaneMode.storageKey) private var rightPaneMode: RightPaneMode = .diff
 
     private var viewModel: LocalTerminalViewModel { session.viewModel }
 

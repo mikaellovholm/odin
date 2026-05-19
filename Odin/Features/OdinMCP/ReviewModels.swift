@@ -77,9 +77,14 @@ struct ReviewFinding: Identifiable, Equatable {
 
 struct FixWorkerOutcome: Equatable {
     struct Skip: Equatable {
-        let title: String
+        /// Finding id the worker chose not to apply. Was previously matched by
+        /// title — id matching avoids ambiguity when two findings at the same
+        /// location share a title (e.g. cross-concern duplicates from the
+        /// reviewer fan-out).
+        let findingId: String
         let reason: String
     }
+    /// Finding ids the worker reports as actually applied (not titles).
     let applied: [String]
     let skipped: [Skip]
     let notes: String?

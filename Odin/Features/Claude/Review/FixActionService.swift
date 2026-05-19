@@ -150,6 +150,7 @@ enum FixActionService {
     private static func buildPrompt(file: String, findings: [ReviewFinding]) -> String {
         let findingObjects: [[String: Any]] = findings.map { f in
             var dict: [String: Any] = [
+                "id": f.id,
                 "title": f.title,
                 "severity": f.severity.rawValue,
                 "concern": f.concern,
@@ -171,7 +172,7 @@ enum FixActionService {
         File: \(file)
         You may edit ONLY this file. Do not touch any other path.
 
-        Findings to address (JSON array):
+        Findings to address (JSON array). Each finding has an `id` you must use when reporting back:
         \(findingsJSON)
 
         For each finding:
@@ -181,8 +182,8 @@ enum FixActionService {
         4. If a finding is wrong on inspection (false positive), skip it and explain why.
 
         When done, call mcp__odin__submit_fix_result with:
-          - applied: array of finding titles you actually fixed (must match the titles above exactly)
-          - skipped: array of {title, reason} for findings you deliberately did NOT apply
+          - applied: array of finding `id` values you actually fixed (NOT titles — use the id field)
+          - skipped: array of {finding_id, reason} for findings you deliberately did NOT apply
           - notes: optional free-form note for the user
 
         Then reply with just the string "DONE".
