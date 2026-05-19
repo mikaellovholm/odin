@@ -15,6 +15,11 @@ final class ClaudeSession: Identifiable {
     /// Bottom shell pane (⇧⌘T). Survives detail-view rebuilds so the zsh
     /// process keeps running across session switches.
     let shellViewModel: ShellTerminalViewModel
+    /// Owns the review side-panel state (selected run, pinned-vs-latest).
+    /// Findings themselves live on `ReviewRun` in `ReviewRunRegistry`, so this
+    /// VM is intentionally thin — it survives detail-view rebuilds just to
+    /// keep `pinnedRunId` stable across tab switches.
+    let reviewViewModel: ReviewViewModel
 
     init(workingDirectory: String, id: UUID = UUID()) {
         self.id = id
@@ -27,6 +32,7 @@ final class ClaudeSession: Identifiable {
         let shell = ShellTerminalViewModel()
         shell.workingDirectory = workingDirectory
         self.shellViewModel = shell
+        self.reviewViewModel = ReviewViewModel()
     }
 }
 #endif

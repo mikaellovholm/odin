@@ -5,8 +5,13 @@ struct ClaudeSessionDetailView: View {
     let session: ClaudeSession
     @State private var keyboardDismissed = false
     @AppStorage(TerminalFontSettings.key) private var fontSize: Double = Double(TerminalFontSettings.defaultSize)
-    @AppStorage("claude.diffPaneVisible") private var diffPaneVisible: Bool = true
     @AppStorage("claude.shellPaneVisible") private var shellPaneVisible: Bool = false
+    /// Three-state right pane: hidden / diff / review. Mutually exclusive by
+    /// design — diff and review can't show at the same time (the user picked
+    /// "separate toggleable pane" in the planning Q&A). New default is `.diff`
+    /// to match the previous `diffPaneVisible: true` default; users who toggled
+    /// the old key lose that preference but land on the same state.
+    @AppStorage("claude.rightPaneMode") private var rightPaneMode: RightPaneMode = .diff
 
     private var viewModel: LocalTerminalViewModel { session.viewModel }
 
@@ -35,27 +40,48 @@ struct ClaudeSessionDetailView: View {
             }
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    diffPaneVisible.toggle()
+                    rightPaneMode = (rightPaneMode == .diff) ? .hidden : .diff
                 } label: {
-                    Image(systemName: diffPaneVisible ? "sidebar.right" : "sidebar.squares.right")
+                    Image(systemName: rightPaneMode == .diff ? "sidebar.right" : "sidebar.squares.right")
                 }
-                .help(diffPaneVisible ? "Hide diff pane" : "Show diff pane")
+                .help(rightPaneMode == .diff ? "Hide diff pane" : "Show diff pane")
                 .keyboardShortcut("d", modifiers: [.command, .shift])
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    rightPaneMode = (rightPaneMode == .review) ? .hidden : .review
+                } label: {
+                    Image(systemName: rightPaneMode == .review ? "checklist.checked" : "checklist")
+                }
+                .help(rightPaneMode == .review ? "Hide review pane" : "Show review pane")
+                .keyboardShortcut("r", modifiers: [.command, .shift])
             }
         }
     }
 
     @ViewBuilder
     private var topArea: some View {
-        if diffPaneVisible {
+        switch rightPaneMode {
+        case .hidden:
+            terminalArea
+        case .diff:
             HSplitView {
                 terminalArea
                     .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
                 DiffPaneView(viewModel: session.diffViewModel)
                     .frame(minWidth: 280, idealWidth: 360, maxHeight: .infinity)
             }
-        } else {
-            terminalArea
+        case .review:
+            HSplitView {
+                terminalArea
+                    .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
+                ReviewPaneView(
+                    viewModel: session.reviewViewModel,
+                    parentSessionId: viewModel.sessionId,
+                    workingDirectory: session.workingDirectory
+                )
+                .frame(minWidth: 320, idealWidth: 400, maxHeight: .infinity)
+            }
         }
     }
 
