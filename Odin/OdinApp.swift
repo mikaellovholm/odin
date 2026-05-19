@@ -4,9 +4,11 @@ import SwiftData
 @main
 struct OdinApp: App {
     let container: ModelContainer
-    @State private var selectedTab: AppTab = .todos
     #if os(macOS)
+    @State private var selectedTab: AppTab = .claude
     @State private var claudeSessionStore = ClaudeSessionStore()
+    #else
+    @State private var selectedTab: AppTab = .todos
     #endif
 
     init() {
@@ -48,9 +50,9 @@ struct OdinApp: App {
         #if os(macOS)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("New Todo") {
-                    selectedTab = .todos
-                    NotificationCenter.default.post(name: .odinCreateNewTodo, object: nil)
+                Button("New Claude Session") {
+                    selectedTab = .claude
+                    NotificationCenter.default.post(name: .odinCreateNewClaudeSession, object: nil)
                 }
                 .keyboardShortcut("n", modifiers: [.command])
                 Button("New Note") {
@@ -58,16 +60,21 @@ struct OdinApp: App {
                     NotificationCenter.default.post(name: .odinCreateNewNote, object: nil)
                 }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
+                Button("New Todo") {
+                    selectedTab = .todos
+                    NotificationCenter.default.post(name: .odinCreateNewTodo, object: nil)
+                }
+                .keyboardShortcut("t", modifiers: [.command, .shift])
             }
             CommandMenu("Go") {
-                Button("Todos") { selectedTab = .todos }
-                    .keyboardShortcut("1", modifiers: [.command, .option])
-                Button("Notes") { selectedTab = .notes }
-                    .keyboardShortcut("2", modifiers: [.command, .option])
-                Button("Terminal") { selectedTab = .terminal }
-                    .keyboardShortcut("3", modifiers: [.command, .option])
                 Button("Claude") { selectedTab = .claude }
-                    .keyboardShortcut("4", modifiers: [.command, .option])
+                    .keyboardShortcut("1", modifiers: .control)
+                Button("Terminal") { selectedTab = .terminal }
+                    .keyboardShortcut("2", modifiers: .control)
+                Button("Notes") { selectedTab = .notes }
+                    .keyboardShortcut("3", modifiers: .control)
+                Button("Todos") { selectedTab = .todos }
+                    .keyboardShortcut("4", modifiers: .control)
             }
         }
         #endif

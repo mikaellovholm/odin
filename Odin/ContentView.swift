@@ -1,10 +1,10 @@
 import SwiftUI
 
 enum AppTab: Hashable {
-    case todos, notes, terminal
     #if os(macOS)
     case claude
     #endif
+    case terminal, notes, todos
 }
 
 struct ContentView: View {
@@ -12,20 +12,20 @@ struct ContentView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            Tab("Todos", systemImage: "checklist", value: .todos) {
-                TodoListView()
-            }
-            Tab("Notes", systemImage: "note.text", value: .notes) {
-                NoteListView()
-            }
-            Tab("Terminal", systemImage: "terminal", value: .terminal) {
-                TerminalContainerView(selectedTab: $selectedTab)
-            }
             #if os(macOS)
             Tab("Claude", systemImage: "brain", value: .claude) {
                 ClaudeSessionListView()
             }
             #endif
+            Tab("Terminal", systemImage: "terminal", value: .terminal) {
+                TerminalContainerView(selectedTab: $selectedTab)
+            }
+            Tab("Notes", systemImage: "note.text", value: .notes) {
+                NoteListView()
+            }
+            Tab("Todos", systemImage: "checklist", value: .todos) {
+                TodoListView()
+            }
         }
     }
 }
