@@ -5,6 +5,8 @@ enum WorktreeError: LocalizedError {
     case notAGitRepo(String)
     case targetExists(String)
     case invalidName(String)
+    case fetchFailed(String)
+    case defaultBranchUnknown
     case gitFailed(String)
 
     var errorDescription: String? {
@@ -15,6 +17,10 @@ enum WorktreeError: LocalizedError {
             return "A folder already exists at:\n\(path)"
         case .invalidName(let reason):
             return "Invalid worktree name: \(reason)"
+        case .fetchFailed(let message):
+            return "git fetch origin failed:\n\(message)"
+        case .defaultBranchUnknown:
+            return "Couldn't determine origin's default branch. Make sure the repo has an `origin` remote with a HEAD set."
         case .gitFailed(let message):
             return "git worktree failed:\n\(message)"
         }
@@ -70,14 +76,60 @@ enum WorktreeService {
             throw WorktreeError.targetExists(target)
         }
 
+        let fetch = await runGit(["fetch", "origin"], cwd: sourcePath)
+        guard fetch.exitCode == 0 else {
+            let message = fetch.output.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw WorktreeError.fetchFailed(message.isEmpty ? "exit \(fetch.exitCode)" : message)
+        }
+
+        let startPoint = try await resolveDefaultStartPoint(cwd: sourcePath)
+
         // `--` ends option parsing so a hypothetical future change that lets a
         // `-`-prefixed value slip through doesn't get treated as a flag.
-        let result = await runGit(["worktree", "add", "-b", name, "--", target], cwd: sourcePath)
+        let result = await runGit(
+            ["worktree", "add", "-b", name, "--", target, startPoint],
+            cwd: sourcePath
+        )
         guard result.exitCode == 0 else {
             let message = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
             throw WorktreeError.gitFailed(message.isEmpty ? "exit \(result.exitCode)" : message)
         }
         return target
+    }
+
+    /// Returns the fully-qualified remote ref to branch from — typically
+    /// `origin/main`, but resolved dynamically so repos using `master`,
+    /// `develop`, or anything else still work.
+    private static func resolveDefaultStartPoint(cwd: String) async throws -> String {
+        let symbolic = await runGit(
+            ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+            cwd: cwd
+        )
+        if symbolic.exitCode == 0 {
+            let value = symbolic.output.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !value.isEmpty {
+                return value
+            }
+        }
+        // `origin/HEAD` may be unset on older clones; ask the remote directly.
+        let remoteShow = await runGit(["remote", "show", "origin"], cwd: cwd)
+        if remoteShow.exitCode == 0 {
+            let prefix = "HEAD branch:"
+            for line in remoteShow.output.split(separator: "\n") {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard trimmed.hasPrefix(prefix) else { continue }
+                let branch = trimmed
+                    .dropFirst(prefix.count)
+                    .trimmingCharacters(in: .whitespaces)
+                // `git remote show origin` prints `HEAD branch: (unknown)` when
+                // the remote has no default; treat that as "couldn't resolve"
+                // rather than handing `origin/(unknown)` to git.
+                if !branch.isEmpty && branch != "(unknown)" {
+                    return "origin/\(branch)"
+                }
+            }
+        }
+        throw WorktreeError.defaultBranchUnknown
     }
 
     private struct GitResult {
