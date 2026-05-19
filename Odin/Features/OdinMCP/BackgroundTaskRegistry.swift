@@ -24,7 +24,8 @@ final class BackgroundTaskRegistry {
     func create(
         prompt: String,
         cwd: String,
-        parentSessionId: String? = nil
+        parentSessionId: String? = nil,
+        model: String? = nil
     ) throws -> BackgroundClaudeRunner {
         guard let claudePath = ClaudePath.resolve() else {
             throw OdinMCPError.claudeNotFound
@@ -34,7 +35,8 @@ final class BackgroundTaskRegistry {
             id: id,
             prompt: prompt,
             cwd: cwd,
-            parentSessionId: parentSessionId
+            parentSessionId: parentSessionId,
+            model: model
         )
         runner.onFinish = { [weak self] _ in
             guard let self else { return }
