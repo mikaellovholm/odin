@@ -34,6 +34,7 @@ final class BackgroundClaudeRunner {
     let prompt: String
     let cwd: String
     let parentSessionId: String?
+    let model: String?
     let createdAt: Date
 
     /// Notified after the runner transitions out of `.running`. The registry
@@ -45,21 +46,32 @@ final class BackgroundClaudeRunner {
     @ObservationIgnored private var stdoutBuffer = Data()
     @ObservationIgnored private var stderrBuffer = Data()
 
-    init(id: String, prompt: String, cwd: String, parentSessionId: String? = nil) {
+    init(
+        id: String,
+        prompt: String,
+        cwd: String,
+        parentSessionId: String? = nil,
+        model: String? = nil
+    ) {
         self.id = id
         self.prompt = prompt
         self.cwd = cwd
         self.parentSessionId = parentSessionId
+        self.model = model
         self.createdAt = Date()
     }
 
     func start(claudePath: String) throws {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: claudePath)
-        p.arguments = [
+        var args = [
             "-p", prompt,
             "--dangerously-skip-permissions",
         ]
+        if let model, !model.isEmpty {
+            args.append(contentsOf: ["--model", model])
+        }
+        p.arguments = args
         p.currentDirectoryURL = URL(fileURLWithPath: cwd)
 
         var env = ProcessInfo.processInfo.environment

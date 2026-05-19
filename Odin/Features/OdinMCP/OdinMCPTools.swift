@@ -21,6 +21,10 @@ enum OdinMCPTools {
                     "cwd": [
                         "type": "string",
                         "description": "Working directory for the background session. Defaults to the user's home directory."
+                    ],
+                    "model": [
+                        "type": "string",
+                        "description": "Optional Claude model id to pin for this worker (e.g. 'claude-sonnet-4-6', 'claude-opus-4-7', 'claude-haiku-4-5'). Omit to use the host claude CLI's default model."
                     ]
                 ],
                 "required": ["prompt"]
@@ -74,16 +78,22 @@ enum OdinMCPTools {
             throw OdinMCPError.invalidArgument("prompt is required")
         }
         let cwd = (args["cwd"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? NSHomeDirectory()
+        let model = (args["model"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         let runner = try BackgroundTaskRegistry.shared.create(
             prompt: prompt,
             cwd: cwd,
-            parentSessionId: CurrentMCPRequest.sessionId
+            parentSessionId: CurrentMCPRequest.sessionId,
+            model: model
         )
-        return jsonString([
+        var response: [String: Any] = [
             "task_id": runner.id,
             "status": "running",
             "cwd": cwd
-        ])
+        ]
+        if let model {
+            response["model"] = model
+        }
+        return jsonString(response)
     }
 
     @MainActor
