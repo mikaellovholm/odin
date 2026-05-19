@@ -9,6 +9,30 @@ enum RightPaneMode: String {
     case hidden
     case diff
     case review
+
+    /// AppStorage key. Shared between the view and the migration helper so
+    /// they can't drift.
+    static let storageKey = "claude.rightPaneMode"
+
+    /// Old boolean AppStorage key from the diff-only era. The migration
+    /// helper translates `true → .diff`, `false → .hidden`, then deletes the
+    /// old key so the user's explicit "hide the pane" choice is preserved.
+    private static let legacyVisibilityKey = "claude.diffPaneVisible"
+
+    /// Called once at app launch, synchronously from `OdinApp.init` so SwiftUI
+    /// never sees the unmigrated state. Idempotent: skips if the new key is
+    /// already set or the legacy key was never written. `UserDefaults` is
+    /// thread-safe, so this is not pinned to the main actor.
+    nonisolated static func migrateLegacyKeyIfNeeded() {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: legacyVisibilityKey) != nil else { return }
+        if defaults.object(forKey: storageKey) == nil {
+            let wasVisible = defaults.bool(forKey: legacyVisibilityKey)
+            let migrated: RightPaneMode = wasVisible ? .diff : .hidden
+            defaults.set(migrated.rawValue, forKey: storageKey)
+        }
+        defaults.removeObject(forKey: legacyVisibilityKey)
+    }
 }
 
 /// Per-session review panel state. Owned by `ClaudeSession` so it survives
@@ -20,7 +44,8 @@ enum RightPaneMode: String {
 @Observable
 final class ReviewViewModel {
     /// If set, the panel shows this specific run even after a newer one starts.
-    /// Cleared by `unpin()` and by `dismiss()`. Nil means "track the latest".
+    /// Cleared by `dismiss(parentSessionId:)`. Nil means "track the latest run
+    /// for this session".
     var pinnedRunId: String?
 
     init() {}
@@ -47,7 +72,7 @@ final class ReviewViewModel {
         cwd: String,
         parentSessionId: String?
     ) {
-        let dispatchable = findings.filter(shouldDispatch)
+        let dispatchable = findings.filter(\.isDispatchable)
         guard !dispatchable.isEmpty else { return }
         let byFile = Dictionary(grouping: dispatchable, by: \.file)
         for (file, group) in byFile {
@@ -72,7 +97,7 @@ final class ReviewViewModel {
         cwd: String,
         parentSessionId: String?
     ) {
-        let targets = run.findings.filter { predicate($0) && shouldDispatch($0) }
+        let targets = run.findings.filter { predicate($0) && $0.isDispatchable }
         let byFile = Dictionary(grouping: targets, by: \.file)
         for (file, group) in byFile {
             FixActionService.spawn(
@@ -91,18 +116,6 @@ final class ReviewViewModel {
         guard let run = currentRun(parentSessionId: parentSessionId) else { return }
         ReviewRunRegistry.shared.remove(run.id)
         pinnedRunId = nil
-    }
-
-    /// Whether `triggerFix` should actually spawn a worker for this finding.
-    /// Keeping this in one place so single-fix and bulk-fix agree.
-    private func shouldDispatch(_ finding: ReviewFinding) -> Bool {
-        guard finding.fixable else { return false }
-        switch finding.fixState {
-        case .none, .failed, .skipped:
-            return true
-        case .queued, .running, .applied:
-            return false
-        }
     }
 }
 #endif

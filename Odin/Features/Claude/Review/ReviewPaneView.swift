@@ -154,19 +154,36 @@ private struct BulkActionBar: View {
     let onFixBlockers: () -> Void
     let onFixAuto: () -> Void
 
+    /// Auto-fixable + still-unfixed blockers — what clicking "Fix blockers"
+    /// actually dispatches.
     private var blockerCount: Int {
         run.findings.filter(\.isUnfixedBlocker).count
     }
+
+    /// All unfixed blockers regardless of fixability — used to surface
+    /// "and N manual" in the tooltip when some require human judgement.
+    private var unfixedBlockerTotal: Int {
+        run.findings.filter { $0.severity == .blocker && $0.isUnfixedAny }.count
+    }
+
     private var autoCount: Int {
         run.findings.filter(\.isUnfixedFixable).count
     }
 
+    /// All unfixed findings regardless of fixability — same purpose as
+    /// `unfixedBlockerTotal` but for the "all auto-fixable" button.
+    private var unfixedTotal: Int {
+        run.findings.filter(\.isUnfixedAny).count
+    }
+
     var body: some View {
         HStack(spacing: 8) {
-            Button("Fix all blockers (\(blockerCount))", action: onFixBlockers)
+            Button("Fix blockers (\(blockerCount))", action: onFixBlockers)
                 .disabled(blockerCount == 0)
-            Button("Fix all auto-fixable (\(autoCount))", action: onFixAuto)
+                .help(blockerTooltip)
+            Button("Fix auto-fixable (\(autoCount))", action: onFixAuto)
                 .disabled(autoCount == 0)
+                .help(autoTooltip)
             Spacer()
             Text("\(run.findings.count) findings")
                 .font(.caption2)
@@ -176,6 +193,28 @@ private struct BulkActionBar: View {
         .controlSize(.small)
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
+    }
+
+    private var blockerTooltip: String {
+        let manual = unfixedBlockerTotal - blockerCount
+        if blockerCount == 0 && manual == 0 {
+            return "No unfixed blockers"
+        }
+        if manual > 0 {
+            return "Spawn fix workers for \(blockerCount) auto-fixable blocker\(blockerCount == 1 ? "" : "s"). \(manual) blocker\(manual == 1 ? "" : "s") still need human judgement (shown as 'manual' on their cards)."
+        }
+        return "Spawn fix workers for all \(blockerCount) unfixed blocker\(blockerCount == 1 ? "" : "s")."
+    }
+
+    private var autoTooltip: String {
+        let manual = unfixedTotal - autoCount
+        if autoCount == 0 && manual == 0 {
+            return "No unfixed findings"
+        }
+        if manual > 0 {
+            return "Spawn fix workers for \(autoCount) auto-fixable finding\(autoCount == 1 ? "" : "s"). \(manual) finding\(manual == 1 ? "" : "s") still need human judgement (shown as 'manual' on their cards)."
+        }
+        return "Spawn fix workers for all \(autoCount) unfixed finding\(autoCount == 1 ? "" : "s")."
     }
 }
 
@@ -197,11 +236,19 @@ private struct LocationGroup: Identifiable {
         findings.map(\.severity).min() ?? .nit
     }
 
-    /// Concern names from each finding in this card, preserving the order they
-    /// were submitted in. Duplicate concern names are kept — if correctness
-    /// and security both flagged the same line, the user wants to see both.
-    var concerns: [String] {
-        findings.map(\.concern)
+    /// Concern names from each finding in this card, deduplicated while
+    /// preserving the order they were submitted in. Two reviewers from
+    /// different concerns flagging the same line both show up (the value of
+    /// the dedupe); the same reviewer submitting N findings at the same line
+    /// shows up once (preventing `[correctness] [correctness] [correctness]`
+    /// noise).
+    var uniqueConcerns: [String] {
+        var seen: Set<String> = []
+        var ordered: [String] = []
+        for finding in findings where seen.insert(finding.concern).inserted {
+            ordered.append(finding.concern)
+        }
+        return ordered
     }
 }
 
@@ -328,10 +375,11 @@ private struct LocationCard: View {
     private var header: some View {
         HStack(spacing: 6) {
             SeverityBadge(severity: group.worstSeverity)
-            // Concern chips — one per reviewer that flagged this location.
-            // Stacked horizontally; wraps cleanly because each is small.
-            ForEach(Array(group.findings.enumerated()), id: \.offset) { _, finding in
-                Text(finding.concern)
+            // One chip per *distinct* concern that flagged this location. The
+            // distinct count matters — a card with three findings all from
+            // `correctness` shouldn't render three identical chips.
+            ForEach(group.uniqueConcerns, id: \.self) { concern in
+                Text(concern)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 5)
@@ -388,8 +436,17 @@ private struct LocationCard: View {
         return anyApplied ? .applied : .actionable(lastFailure: nil, lastSkip: nil)
     }
 
+    /// True only when at least one finding in this card is in a state where
+    /// dispatching a fix worker makes sense. Shares its definition with
+    /// `ReviewFinding.isDispatchable` so the Fix button is never shown for a
+    /// card where clicking it would silently dispatch nothing.
+    ///
+    /// Counter-example that motivated this: a card with [fixable-A(.applied),
+    /// non-fixable-B(.none)]. Without the fixState guard, anyFixable=true and
+    /// the Fix button stays on even though `isDispatchable` returns false for
+    /// both findings — A is already applied, B is not fixable.
     private var anyFixable: Bool {
-        group.findings.contains(where: { $0.fixable })
+        group.findings.contains(where: \.isDispatchable)
     }
 
     @ViewBuilder
@@ -490,15 +547,30 @@ private struct SeverityBadge: View {
 
 // MARK: - Finding predicates
 
-private extension ReviewFinding {
-    var isUnfixedBlocker: Bool {
-        guard severity == .blocker, fixable else { return false }
+extension ReviewFinding {
+    /// "Fix worker dispatch makes sense for this finding": it's marked
+    /// fixable AND is in a state we'd actually act on (untouched / previously
+    /// failed / previously skipped). The single source of truth shared by the
+    /// view model's bulk dispatch path, the location-card Fix button, and the
+    /// bulk-action bar's counts.
+    var isDispatchable: Bool {
+        guard fixable else { return false }
         return isUnfixed
     }
 
+    /// Unfixed regardless of whether the finding is auto-fixable. Used by the
+    /// bulk action bar to show "N auto-fixable + M manual" instead of silently
+    /// dropping non-fixable findings from the count.
+    var isUnfixedAny: Bool {
+        isUnfixed
+    }
+
+    var isUnfixedBlocker: Bool {
+        severity == .blocker && isDispatchable
+    }
+
     var isUnfixedFixable: Bool {
-        guard fixable else { return false }
-        return isUnfixed
+        isDispatchable
     }
 
     private var isUnfixed: Bool {

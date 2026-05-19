@@ -173,17 +173,24 @@ final class ReviewRunRegistry {
         guard let idx = run.fixes.firstIndex(where: { $0.id == taskId }) else { return }
         run.fixes[idx].outcome = outcome
         // Propagate to the underlying findings so the row UI flips without
-        // having to cross-reference the fixes array on every render.
-        let appliedSet = Set(outcome.applied)
-        let skippedByTitle = Dictionary(
-            uniqueKeysWithValues: outcome.skipped.map { ($0.title, $0.reason) }
+        // having to cross-reference the fixes array on every render. Matching
+        // by finding id (not title) avoids confusion when the same location
+        // has multiple findings whose titles collide.
+        let scopedIds = Set(run.fixes[idx].findingIds)
+        let appliedSet = Set(outcome.applied).intersection(scopedIds)
+        // uniquingKeysWith (rather than uniqueKeysWithValues) so a worker that
+        // echoes the same finding id twice in `skipped` doesn't trap.
+        let skippedById = Dictionary(
+            outcome.skipped
+                .filter { scopedIds.contains($0.findingId) }
+                .map { ($0.findingId, $0.reason) },
+            uniquingKeysWith: { _, last in last }
         )
         for fid in run.fixes[idx].findingIds {
             guard let fIdx = run.findings.firstIndex(where: { $0.id == fid }) else { continue }
-            let title = run.findings[fIdx].title
-            if appliedSet.contains(title) {
+            if appliedSet.contains(fid) {
                 run.findings[fIdx].fixState = .applied
-            } else if let reason = skippedByTitle[title] {
+            } else if let reason = skippedById[fid] {
                 run.findings[fIdx].fixState = .skipped(reason: reason)
             } else {
                 // Worker neither applied nor explicitly skipped — treat as
