@@ -29,7 +29,7 @@ There are no tests, linter, or formatter configured.
 - `ModelContainer` is set up in `OdinApp.swift` and injected via SwiftUI environment.
 
 ### Navigation
-`ContentView.swift` uses a `TabView` with `AppTab` enum (`todos`, `notes`, `terminal`, and `claude` on macOS). A `@State` binding controls the selected tab. The Terminal view receives a `$selectedTab` binding to navigate back to Todos programmatically (since the tab bar is hidden when connected).
+`ContentView.swift` uses a `TabView` with `AppTab` enum (`claude` on macOS, then `terminal`, `notes`, `todos`). A `@State` binding controls the selected tab. The Terminal view receives a `$selectedTab` binding to navigate back to Todos programmatically (since the tab bar is hidden when connected). Default tab is `.claude` on macOS, `.todos` on iOS.
 
 ### Feature Modules
 Each feature lives in `Odin/Features/<Name>/` with its own views and services. Models live in `Odin/Models/`. Todos (Phase 1) and Notes (Phase 2) are complete. Terminal/SSH (Phase 3) core flow works but is missing: iOS keyboard accessory bar, font size control, and auto-reconnect. Claude Terminal (macOS-only) launches Claude Code CLI in a local terminal. OdinMCP (macOS-only) gives those Claude sessions an in-process MCP server for spawning headless background workers. See `PLAN.md` for full details.
@@ -99,7 +99,7 @@ Lives in `Odin/Features/OdinMCP/`. Boots from `OdinApp.init` (macOS-only `Task {
 
 ### App-Level Glue
 
-- **OdinApp** owns `selectedTab` and the `ClaudeSessionStore` (macOS). Wraps `ContentView` in `ThemedContainer`. On macOS adds `CommandGroup(replacing: .newItem)` (New Todo / Note posting `.odinCreateNewTodo` / `.odinCreateNewNote` notifications), a `Go` `CommandMenu` (⌥⌘1…4 to switch tabs — chosen over ⌘1…9 to avoid colliding with the Claude tab's session shortcuts), and a `Settings` scene.
+- **OdinApp** owns `selectedTab` and the `ClaudeSessionStore` (macOS). Wraps `ContentView` in `ThemedContainer`. On macOS adds `CommandGroup(replacing: .newItem)` with three creation actions: New Claude Session (⌘N, posts `.odinCreateNewClaudeSession`), New Note (⇧⌘N, posts `.odinCreateNewNote`), New Todo (⇧⌘T, posts `.odinCreateNewTodo`). A `Go` `CommandMenu` exposes tab switching as ⌃1…⌃4 (Claude / Terminal / Notes / Todos) — chosen over ⌘1…9 to avoid colliding with the Claude tab's per-session shortcuts. ⌘N is safe alongside the per-session ⌘1…⌘9 because the digit keys are distinct. Also adds a `Settings` scene.
 - **SettingsView** — appearance (system/light/dark), accent color, terminal font slider, biometric SSH protection toggle. Available via ⌘, on macOS and a gear icon in the Todos toolbar on iOS.
 - **CloudKitSyncMonitor** — `@Observable` singleton observing `NSPersistentCloudKitContainer.eventChangedNotification`. `CloudKitSyncStatusView` is mounted in both list toolbars and lights up `exclamationmark.icloud.fill` when the last sync errored.
 - **MarkdownTextEditor** — UIViewRepresentable (UITextView) / NSViewRepresentable (NSTextView subclass) that intercepts ⌘B / ⌘I / ⌘K to wrap the current selection in `**…**` / `*…*` / `[text](url)`. Used in `NoteDetailView` instead of SwiftUI's `TextEditor` because the latter doesn't expose selection.

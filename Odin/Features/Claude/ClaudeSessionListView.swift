@@ -13,6 +13,9 @@ struct ClaudeSessionListView: View {
                 .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(keyboardShortcuts)
+        .onReceive(NotificationCenter.default.publisher(for: .odinCreateNewClaudeSession)) { _ in
+            addSession()
+        }
     }
 
     /// Hidden buttons that register ⌘1…⌘9 as shortcuts for the first nine sessions.
@@ -56,7 +59,7 @@ struct ClaudeSessionListView: View {
                     .font(.title3)
             }
             .buttonStyle(.borderless)
-            .help("New Claude session")
+            .help("New Claude session (⌘N)")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)

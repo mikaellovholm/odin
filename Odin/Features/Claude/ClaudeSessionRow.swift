@@ -19,14 +19,9 @@ struct ClaudeSessionRow: View {
             }
             Spacer()
             if let count = runningTaskCount, count > 0 {
-                HStack(spacing: 3) {
-                    Image(systemName: "bolt.fill")
-                        .font(.caption2)
-                    Text("\(count)")
-                        .font(.caption.monospacedDigit())
-                }
-                .foregroundStyle(.blue)
-                .help("\(count) background task\(count == 1 ? "" : "s") running")
+                Text("🤔")
+                    .font(.caption)
+                    .help("\(count) background task\(count == 1 ? "" : "s") running")
             }
             if let shortcutNumber {
                 Text("⌘\(shortcutNumber)")
