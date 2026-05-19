@@ -170,44 +170,75 @@ struct ClaudeSessionListView: View {
         )
     }
 
+    private enum NewSessionChoice {
+        case worktree(name: String)
+        case useFolderDirectly
+    }
+
     private func addSession() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
-        panel.prompt = "Select Repo"
-        panel.message = "Pick the git repository — a new worktree will be created from it."
+        panel.prompt = "Select Folder"
+        panel.message = "Pick a git repo to create a worktree from, or any folder to open Claude directly."
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let sourcePath = url.path
 
         let base = WorktreeService.repoBaseName(for: url.lastPathComponent)
-        guard let name = promptForWorktreeName(repoBase: base) else { return }
+        guard let choice = promptForNewSession(repoBase: base) else { return }
 
-        Task { @MainActor in
-            do {
-                let path = try await WorktreeService.create(sourcePath: sourcePath, name: name)
-                let session = store.addSession(directory: path)
-                store.select(session)
-            } catch {
-                presentError(error)
+        switch choice {
+        case .useFolderDirectly:
+            let session = store.addSession(directory: sourcePath)
+            store.select(session)
+        case .worktree(let name):
+            Task { @MainActor in
+                do {
+                    let path = try await WorktreeService.create(sourcePath: sourcePath, name: name)
+                    let session = store.addSession(directory: path)
+                    store.select(session)
+                } catch {
+                    presentError(error)
+                }
             }
         }
     }
 
-    private func promptForWorktreeName(repoBase: String) -> String? {
+    private func promptForNewSession(repoBase: String) -> NewSessionChoice? {
         let alert = NSAlert()
-        alert.messageText = "New worktree"
-        alert.informativeText = "Will create a sibling folder named \(repoBase)--<name> and check out a new branch with that name."
+        alert.messageText = "New Claude session"
+        alert.informativeText = "Creates a sibling worktree named \(repoBase)--<name> off origin's default branch, after fetching. Or check the box to open Claude in the selected folder directly."
         alert.alertStyle = .informational
         alert.addButton(withTitle: "Create")
         alert.addButton(withTitle: "Cancel")
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
         field.placeholderString = "branch-name"
-        alert.accessoryView = field
+
+        let checkbox = NSButton(
+            checkboxWithTitle: "Use this folder directly (no worktree)",
+            target: nil,
+            action: nil
+        )
+        let coordinator = WorktreePromptCoordinator(nameField: field)
+        checkbox.target = coordinator
+        checkbox.action = #selector(WorktreePromptCoordinator.checkboxChanged(_:))
+
+        let stack = NSStackView(views: [field, checkbox])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 8
+        stack.frame = NSRect(x: 0, y: 0, width: 320, height: 56)
+        alert.accessoryView = stack
         alert.window.initialFirstResponder = field
+
         guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        if checkbox.state == .on {
+            return .useFolderDirectly
+        }
         let trimmed = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
+        return trimmed.isEmpty ? nil : .worktree(name: trimmed)
     }
 
     private func presentError(_ error: Error) {
@@ -216,6 +247,22 @@ struct ClaudeSessionListView: View {
         alert.informativeText = (error as? LocalizedError)?.errorDescription ?? "\(error)"
         alert.alertStyle = .warning
         alert.runModal()
+    }
+}
+
+/// Bridges the NSButton checkbox in the new-session alert to the NSTextField
+/// so the name field greys out when "use folder directly" is checked. Owned
+/// locally by `promptForNewSession` for the duration of the modal because
+/// NSControl.target is unowned(unsafe).
+private final class WorktreePromptCoordinator: NSObject {
+    private weak var nameField: NSTextField?
+
+    init(nameField: NSTextField) {
+        self.nameField = nameField
+    }
+
+    @objc func checkboxChanged(_ sender: NSButton) {
+        nameField?.isEnabled = sender.state != .on
     }
 }
 #endif
