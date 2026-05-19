@@ -40,8 +40,24 @@ struct ClaudeSessionListView: View {
             } else {
                 sessionList
             }
+            Divider()
+            shortcutHints
         }
         .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    private var shortcutHints: some View {
+        HStack {
+            Text("Diff pane")
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text("⇧⌘D")
+                .foregroundStyle(.tertiary)
+                .monospaced()
+        }
+        .font(.caption)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
     }
 
     private var header: some View {

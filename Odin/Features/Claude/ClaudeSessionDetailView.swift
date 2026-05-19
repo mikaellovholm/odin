@@ -5,10 +5,37 @@ struct ClaudeSessionDetailView: View {
     let session: ClaudeSession
     @State private var keyboardDismissed = false
     @AppStorage(TerminalFontSettings.key) private var fontSize: Double = Double(TerminalFontSettings.defaultSize)
+    @AppStorage("claude.diffPaneVisible") private var diffPaneVisible: Bool = true
 
     private var viewModel: LocalTerminalViewModel { session.viewModel }
 
     var body: some View {
+        Group {
+            if diffPaneVisible {
+                HSplitView {
+                    terminalArea
+                        .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
+                    DiffPaneView(viewModel: session.diffViewModel)
+                        .frame(minWidth: 280, idealWidth: 360, maxHeight: .infinity)
+                }
+            } else {
+                terminalArea
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    diffPaneVisible.toggle()
+                } label: {
+                    Image(systemName: diffPaneVisible ? "sidebar.right" : "sidebar.squares.right")
+                }
+                .help(diffPaneVisible ? "Hide diff pane" : "Show diff pane")
+                .keyboardShortcut("d", modifiers: [.command, .shift])
+            }
+        }
+    }
+
+    private var terminalArea: some View {
         ZStack {
             TerminalRepresentable(
                 onTerminalViewCreated: { viewModel.setTerminalView($0) },
