@@ -6,23 +6,33 @@ struct ClaudeSessionDetailView: View {
     @State private var keyboardDismissed = false
     @AppStorage(TerminalFontSettings.key) private var fontSize: Double = Double(TerminalFontSettings.defaultSize)
     @AppStorage("claude.diffPaneVisible") private var diffPaneVisible: Bool = true
+    @AppStorage("claude.shellPaneVisible") private var shellPaneVisible: Bool = false
 
     private var viewModel: LocalTerminalViewModel { session.viewModel }
 
     var body: some View {
         Group {
-            if diffPaneVisible {
-                HSplitView {
-                    terminalArea
-                        .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
-                    DiffPaneView(viewModel: session.diffViewModel)
-                        .frame(minWidth: 280, idealWidth: 360, maxHeight: .infinity)
+            if shellPaneVisible {
+                VSplitView {
+                    topArea
+                        .frame(minHeight: 200, maxHeight: .infinity)
+                    shellPane
+                        .frame(minHeight: 120, idealHeight: 240, maxHeight: .infinity)
                 }
             } else {
-                terminalArea
+                topArea
             }
         }
         .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    shellPaneVisible.toggle()
+                } label: {
+                    Image(systemName: shellPaneVisible ? "rectangle.bottomthird.inset.filled" : "rectangle.bottomthird.inset")
+                }
+                .help(shellPaneVisible ? "Hide terminal panel" : "Show terminal panel")
+                .keyboardShortcut("t", modifiers: [.command, .shift])
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     diffPaneVisible.toggle()
@@ -33,6 +43,45 @@ struct ClaudeSessionDetailView: View {
                 .keyboardShortcut("d", modifiers: [.command, .shift])
             }
         }
+    }
+
+    @ViewBuilder
+    private var topArea: some View {
+        if diffPaneVisible {
+            HSplitView {
+                terminalArea
+                    .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
+                DiffPaneView(viewModel: session.diffViewModel)
+                    .frame(minWidth: 280, idealWidth: 360, maxHeight: .infinity)
+            }
+        } else {
+            terminalArea
+        }
+    }
+
+    private var shellPane: some View {
+        ZStack {
+            TerminalRepresentable(
+                onTerminalViewCreated: { session.shellViewModel.setTerminalView($0) },
+                onDataSend: { session.shellViewModel.sendData($0) },
+                onSizeChanged: { session.shellViewModel.resizeTerminal(cols: $0, rows: $1) },
+                fontSize: CGFloat(fontSize),
+                isConnected: session.shellViewModel.state == .running,
+                keyboardDismissed: $keyboardDismissed
+            )
+            .opacity(session.shellViewModel.state == .running ? 1 : 0)
+
+            if case .exited(let code) = session.shellViewModel.state {
+                VStack(spacing: 8) {
+                    Text(code.map { "Shell exited (\($0))" } ?? "Shell exited")
+                        .foregroundStyle(.secondary)
+                    Button("Restart") { session.shellViewModel.restart() }
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+        }
+        .background(.black)
+        .onAppear { session.shellViewModel.startIfNeeded() }
     }
 
     private var terminalArea: some View {

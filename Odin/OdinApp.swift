@@ -64,7 +64,7 @@ struct OdinApp: App {
                     selectedTab = .todos
                     NotificationCenter.default.post(name: .odinCreateNewTodo, object: nil)
                 }
-                .keyboardShortcut("t", modifiers: [.command, .shift])
+                .keyboardShortcut("t", modifiers: [.command, .option])
             }
             CommandMenu("Go") {
                 Button("Claude") { selectedTab = .claude }

@@ -24,6 +24,7 @@ final class ClaudeSessionStore {
 
     func remove(_ session: ClaudeSession) {
         session.viewModel.terminate()
+        session.shellViewModel.terminate()
         if selectedSessionID == session.id {
             selectedSessionID = sessions.first(where: { $0.id != session.id })?.id
         }
