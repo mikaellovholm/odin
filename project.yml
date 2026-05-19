@@ -17,6 +17,9 @@ packages:
   Citadel:
     url: https://github.com/orlandos-nl/Citadel
     from: "0.12.0"
+  Highlightr:
+    url: https://github.com/raspu/Highlightr
+    from: "2.2.0"
 
 targets:
   Odin:
@@ -50,3 +53,5 @@ targets:
       - package: MarkdownUI
       - package: SwiftTerm
       - package: Citadel
+      - package: Highlightr
+        platforms: [macOS]
