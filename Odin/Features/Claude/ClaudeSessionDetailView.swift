@@ -17,15 +17,27 @@ struct ClaudeSessionDetailView: View {
 
     var body: some View {
         Group {
-            if shellPaneVisible {
-                VSplitView {
-                    topArea
-                        .frame(minHeight: 200, maxHeight: .infinity)
-                    shellPane
-                        .frame(minHeight: 120, idealHeight: 240, maxHeight: .infinity)
+            switch rightPaneMode {
+            case .hidden:
+                leftColumn
+            case .diff:
+                HSplitView {
+                    leftColumn
+                        .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
+                    DiffPaneView(viewModel: session.diffViewModel)
+                        .frame(minWidth: 280, idealWidth: 360, maxHeight: .infinity)
                 }
-            } else {
-                topArea
+            case .review:
+                HSplitView {
+                    leftColumn
+                        .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
+                    ReviewPaneView(
+                        viewModel: session.reviewViewModel,
+                        parentSessionId: viewModel.sessionId,
+                        workingDirectory: session.workingDirectory
+                    )
+                    .frame(minWidth: 320, idealWidth: 400, maxHeight: .infinity)
+                }
             }
         }
         .toolbar {
@@ -51,37 +63,28 @@ struct ClaudeSessionDetailView: View {
                 Button {
                     rightPaneMode = (rightPaneMode == .review) ? .hidden : .review
                 } label: {
-                    Image(systemName: rightPaneMode == .review ? "checklist.checked" : "checklist")
+                    Text("⚖️")
                 }
                 .help(rightPaneMode == .review ? "Hide review pane" : "Show review pane")
                 .keyboardShortcut("r", modifiers: [.command, .shift])
             }
         }
+        .onChange(of: shellPaneVisible) { _, newValue in
+            if newValue { focusShell() }
+        }
     }
 
     @ViewBuilder
-    private var topArea: some View {
-        switch rightPaneMode {
-        case .hidden:
+    private var leftColumn: some View {
+        if shellPaneVisible {
+            VSplitView {
+                terminalArea
+                    .frame(minHeight: 200, maxHeight: .infinity)
+                shellPane
+                    .frame(minHeight: 120, idealHeight: 240, maxHeight: .infinity)
+            }
+        } else {
             terminalArea
-        case .diff:
-            HSplitView {
-                terminalArea
-                    .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
-                DiffPaneView(viewModel: session.diffViewModel)
-                    .frame(minWidth: 280, idealWidth: 360, maxHeight: .infinity)
-            }
-        case .review:
-            HSplitView {
-                terminalArea
-                    .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
-                ReviewPaneView(
-                    viewModel: session.reviewViewModel,
-                    parentSessionId: viewModel.sessionId,
-                    workingDirectory: session.workingDirectory
-                )
-                .frame(minWidth: 320, idealWidth: 400, maxHeight: .infinity)
-            }
         }
     }
 
@@ -106,8 +109,14 @@ struct ClaudeSessionDetailView: View {
                 }
             }
         }
-        .background(.black)
-        .onAppear { session.shellViewModel.startIfNeeded() }
+        .background(Color(nsColor: .windowBackgroundColor))
+        .onAppear {
+            session.shellViewModel.startIfNeeded()
+            focusShell()
+        }
+        .onChange(of: session.shellViewModel.state) { _, newState in
+            if newState == .running { focusShell() }
+        }
     }
 
     private var terminalArea: some View {
@@ -145,6 +154,13 @@ struct ClaudeSessionDetailView: View {
     private func focusTerminal() {
         DispatchQueue.main.async {
             guard let tv = viewModel.terminalView else { return }
+            tv.window?.makeFirstResponder(tv)
+        }
+    }
+
+    private func focusShell() {
+        DispatchQueue.main.async {
+            guard let tv = session.shellViewModel.terminalView else { return }
             tv.window?.makeFirstResponder(tv)
         }
     }

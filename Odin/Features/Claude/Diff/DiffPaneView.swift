@@ -3,6 +3,12 @@ import SwiftUI
 
 struct DiffPaneView: View {
     @Bindable var viewModel: DiffViewModel
+    @FocusState private var fileListFocused: Bool
+    /// Only force focus on the very first file-list materialisation. Without
+    /// this latch, every later refresh (e.g. file save → FSEvents → reload)
+    /// would yank focus out of whatever the user has selected — including the
+    /// diff body or another pane.
+    @State private var didInitialFocus = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -31,7 +37,22 @@ struct DiffPaneView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
-        .onAppear { viewModel.activate() }
+        .onAppear {
+            viewModel.activate()
+            // Try to focus immediately. If `activate()` has already cached
+            // files, this lands now; otherwise the onChange path below picks
+            // it up once the first refresh completes.
+            focusFileList()
+        }
+        .onChange(of: viewModel.files.isEmpty) { _, isEmpty in
+            // Re-assert focus once the initial file load lands — `.activate()`
+            // refreshes async, so the very first `onAppear` focus call races
+            // the file list materialising. Latched so later refreshes (FSEvents
+            // → reload) don't steal focus from the user.
+            guard !didInitialFocus, !isEmpty else { return }
+            focusFileList()
+            didInitialFocus = true
+        }
         .onDisappear { viewModel.deactivate() }
     }
 
@@ -73,6 +94,13 @@ struct DiffPaneView: View {
             }
         }
         .listStyle(.plain)
+        .focused($fileListFocused)
+    }
+
+    private func focusFileList() {
+        DispatchQueue.main.async {
+            fileListFocused = true
+        }
     }
 
     @ViewBuilder
