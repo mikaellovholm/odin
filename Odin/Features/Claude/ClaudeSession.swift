@@ -20,6 +20,12 @@ final class ClaudeSession: Identifiable {
     /// VM is intentionally thin — it survives detail-view rebuilds just to
     /// keep `pinnedRunId` stable across tab switches.
     let reviewViewModel: ReviewViewModel
+    /// Project file-tree side panel (⇧⌘P). Per-session so the expanded set,
+    /// loaded tree, and currently-open file survive detail-view rebuilds.
+    let projectViewModel: ProjectPanelViewModel
+    /// Per-session visibility of the project panel. Toggled by ⇧⌘P on the
+    /// active session; not persisted across app launches.
+    var projectPanelVisible: Bool = false
 
     init(workingDirectory: String, id: UUID = UUID()) {
         self.id = id
@@ -33,6 +39,7 @@ final class ClaudeSession: Identifiable {
         shell.workingDirectory = workingDirectory
         self.shellViewModel = shell
         self.reviewViewModel = ReviewViewModel()
+        self.projectViewModel = ProjectPanelViewModel(workingDirectory: workingDirectory)
     }
 }
 #endif

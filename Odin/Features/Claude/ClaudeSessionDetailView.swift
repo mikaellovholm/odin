@@ -16,21 +16,82 @@ struct ClaudeSessionDetailView: View {
     private var viewModel: LocalTerminalViewModel { session.viewModel }
 
     var body: some View {
-        Group {
-            switch rightPaneMode {
-            case .hidden:
+        composedBody
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        session.projectPanelVisible.toggle()
+                    } label: {
+                        Image(systemName: session.projectPanelVisible ? "folder.fill" : "folder")
+                    }
+                    .help(session.projectPanelVisible ? "Hide project panel" : "Show project panel")
+                    .keyboardShortcut("p", modifiers: [.command, .shift])
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        shellPaneVisible.toggle()
+                    } label: {
+                        Image(systemName: shellPaneVisible ? "rectangle.bottomthird.inset.filled" : "rectangle.bottomthird.inset")
+                    }
+                    .help(shellPaneVisible ? "Hide terminal panel" : "Show terminal panel")
+                    .keyboardShortcut("t", modifiers: [.command, .shift])
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        rightPaneMode = (rightPaneMode == .diff) ? .hidden : .diff
+                    } label: {
+                        Image(systemName: rightPaneMode == .diff ? "sidebar.right" : "sidebar.squares.right")
+                    }
+                    .help(rightPaneMode == .diff ? "Hide diff pane" : "Show diff pane")
+                    .keyboardShortcut("d", modifiers: [.command, .shift])
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        rightPaneMode = (rightPaneMode == .review) ? .hidden : .review
+                    } label: {
+                        Text("⚖️")
+                    }
+                    .help(rightPaneMode == .review ? "Hide review pane" : "Show review pane")
+                    .keyboardShortcut("r", modifiers: [.command, .shift])
+                }
+            }
+            .onChange(of: shellPaneVisible) { _, newValue in
+                if newValue { focusShell() }
+            }
+    }
+
+    /// HSplitView columns from left to right (each conditional):
+    /// [project panel] [file viewer] [terminal/shell] [diff or review].
+    /// When neither the project panel nor a right-pane is visible we bypass
+    /// the HSplitView entirely so the terminal fills the area without a
+    /// stray drag handle (matches the original `.hidden` case).
+    @ViewBuilder
+    private var composedBody: some View {
+        let projectVisible = session.projectPanelVisible
+        let fileVisible = projectVisible && session.projectViewModel.selectedFileURL != nil
+        let rightVisible = rightPaneMode != .hidden
+
+        if !projectVisible && !rightVisible {
+            leftColumn
+        } else {
+            HSplitView {
+                if projectVisible {
+                    ProjectPanelView(viewModel: session.projectViewModel)
+                        .frame(minWidth: 200, idealWidth: 220, maxWidth: 420, maxHeight: .infinity)
+                }
+                if fileVisible {
+                    FileViewerView(
+                        workingDirectory: session.workingDirectory,
+                        viewModel: session.projectViewModel
+                    )
+                    .frame(minWidth: 280, idealWidth: 600, maxHeight: .infinity)
+                }
                 leftColumn
-            case .diff:
-                HSplitView {
-                    leftColumn
-                        .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
+                if rightPaneMode == .diff {
                     DiffPaneView(viewModel: session.diffViewModel)
                         .frame(minWidth: 280, idealWidth: 360, maxHeight: .infinity)
-                }
-            case .review:
-                HSplitView {
-                    leftColumn
-                        .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
+                } else if rightPaneMode == .review {
                     ReviewPaneView(
                         viewModel: session.reviewViewModel,
                         parentSessionId: viewModel.sessionId,
@@ -39,38 +100,6 @@ struct ClaudeSessionDetailView: View {
                     .frame(minWidth: 320, idealWidth: 400, maxHeight: .infinity)
                 }
             }
-        }
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    shellPaneVisible.toggle()
-                } label: {
-                    Image(systemName: shellPaneVisible ? "rectangle.bottomthird.inset.filled" : "rectangle.bottomthird.inset")
-                }
-                .help(shellPaneVisible ? "Hide terminal panel" : "Show terminal panel")
-                .keyboardShortcut("t", modifiers: [.command, .shift])
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    rightPaneMode = (rightPaneMode == .diff) ? .hidden : .diff
-                } label: {
-                    Image(systemName: rightPaneMode == .diff ? "sidebar.right" : "sidebar.squares.right")
-                }
-                .help(rightPaneMode == .diff ? "Hide diff pane" : "Show diff pane")
-                .keyboardShortcut("d", modifiers: [.command, .shift])
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    rightPaneMode = (rightPaneMode == .review) ? .hidden : .review
-                } label: {
-                    Text("⚖️")
-                }
-                .help(rightPaneMode == .review ? "Hide review pane" : "Show review pane")
-                .keyboardShortcut("r", modifiers: [.command, .shift])
-            }
-        }
-        .onChange(of: shellPaneVisible) { _, newValue in
-            if newValue { focusShell() }
         }
     }
 
