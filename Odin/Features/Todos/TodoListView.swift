@@ -6,6 +6,12 @@ struct TodoListView: View {
     @Query(sort: \TodoItem.sortOrder) private var todos: [TodoItem]
     @State private var showingAddSheet = false
     @State private var editingTodo: TodoItem?
+    #if os(macOS)
+    /// Keyboard-focused todo. Drives List's native selection highlight and is
+    /// the target of ↩ / → "open" actions.
+    @State private var selectedTodo: TodoItem?
+    @FocusState private var listFocused: Bool
+    #endif
     #if os(iOS)
     @State private var showingSettings = false
     #endif
@@ -19,97 +25,251 @@ struct TodoListView: View {
     }
 
     var body: some View {
+        #if os(macOS)
+        macBody
+        #else
+        iosBody
+        #endif
+    }
+
+    // MARK: - macOS
+
+    #if os(macOS)
+    /// Matches the Notes / Claude Sessions layout: custom in-pane header with
+    /// the `+` button beside the title, no window toolbar chrome.
+    private var macBody: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            Divider()
+            todoList
+                .overlay { emptyOverlay }
+        }
+        .sheet(isPresented: $showingAddSheet) {
+            TodoDetailView()
+        }
+        .sheet(item: $editingTodo) { todo in
+            TodoDetailView(existingTodo: todo)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .odinCreateNewTodo)) { _ in
+            showingAddSheet = true
+        }
+        .onAppear {
+            // Seed selection so ↑/↓/↩ work immediately without a click first.
+            if selectedTodo == nil {
+                selectedTodo = incompleteTodos.first ?? completedTodos.first
+            }
+            listFocused = true
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            Text("Todos")
+                .font(.headline)
+            Spacer()
+            CloudKitSyncStatusView()
+            Button { showingAddSheet = true } label: {
+                Image(systemName: "plus")
+                    .font(.title3)
+            }
+            .buttonStyle(.borderless)
+            .help("New todo (⌘N)")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    @ViewBuilder
+    private var emptyOverlay: some View {
+        if todos.isEmpty {
+            ContentUnavailableView(
+                "No Todos",
+                systemImage: "checklist",
+                description: Text("Click + to add a todo")
+            )
+        }
+    }
+    #endif
+
+    // MARK: - iOS
+
+    #if !os(macOS)
+    private var iosBody: some View {
         NavigationStack {
-            List {
+            todoList
+                .navigationTitle("Todos")
+                .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            showingAddSheet = true
+                        } label: {
+                            Image(systemName: "plus")
+                        }
+                    }
+                    ToolbarItem(placement: .automatic) {
+                        CloudKitSyncStatusView()
+                    }
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            showingSettings = true
+                        } label: {
+                            Image(systemName: "gear")
+                        }
+                    }
+                }
+                .sheet(isPresented: $showingAddSheet) {
+                    TodoDetailView()
+                }
+                .sheet(item: $editingTodo) { todo in
+                    TodoDetailView(existingTodo: todo)
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .odinCreateNewTodo)) { _ in
+                    showingAddSheet = true
+                }
+                .sheet(isPresented: $showingSettings) {
+                    NavigationStack {
+                        SettingsView()
+                            .toolbar {
+                                ToolbarItem(placement: .confirmationAction) {
+                                    Button("Done") { showingSettings = false }
+                                }
+                            }
+                    }
+                }
+                .overlay {
+                    if todos.isEmpty {
+                        ContentUnavailableView(
+                            "No Todos",
+                            systemImage: "checklist",
+                            description: Text("Tap + to add a todo")
+                        )
+                    }
+                }
+        }
+    }
+    #endif
+
+    // MARK: - Shared
+
+    private var todoList: some View {
+        #if os(macOS)
+        macTodoList
+        #else
+        iosTodoList
+        #endif
+    }
+
+    #if os(macOS)
+    /// macOS: List(selection:) gives native ↑/↓ arrow navigation. ↩ and →
+    /// open the focused todo. Single click both selects and opens — keeping
+    /// the old click-to-open behavior intact, while seeding `selectedTodo`
+    /// so subsequent arrow nav continues from where the user clicked.
+    private var macTodoList: some View {
+        List(selection: $selectedTodo) {
+            Section {
+                ForEach(incompleteTodos) { todo in
+                    TodoRowView(todo: todo)
+                        .tag(todo)
+                        .onTapGesture {
+                            selectedTodo = todo
+                            editingTodo = todo
+                        }
+                }
+                .onDelete { offsets in
+                    deleteTodos(from: incompleteTodos, at: offsets)
+                }
+                .onMove { source, destination in
+                    moveTodos(from: source, to: destination)
+                }
+            }
+
+            if !completedTodos.isEmpty {
                 Section {
-                    ForEach(incompleteTodos) { todo in
+                    ForEach(completedTodos) { todo in
+                        TodoRowView(todo: todo)
+                            .tag(todo)
+                            .onTapGesture {
+                                selectedTodo = todo
+                                editingTodo = todo
+                            }
+                    }
+                    .onDelete { offsets in
+                        deleteTodos(from: completedTodos, at: offsets)
+                    }
+                } header: {
+                    HStack {
+                        Text("Completed")
+                        Spacer()
+                        Button("Clear") {
+                            clearCompleted()
+                        }
+                        .font(.caption)
+                        .textCase(nil)
+                    }
+                }
+            }
+        }
+        .focused($listFocused)
+        .onKeyPress(.return) { openSelection() }
+        .onKeyPress(.rightArrow) { openSelection() }
+        .onKeyPress(.space) { toggleSelectionCompleted() }
+    }
+
+    private func openSelection() -> KeyPress.Result {
+        guard let selectedTodo else { return .ignored }
+        editingTodo = selectedTodo
+        return .handled
+    }
+
+    private func toggleSelectionCompleted() -> KeyPress.Result {
+        guard let selectedTodo else { return .ignored }
+        withAnimation {
+            selectedTodo.isCompleted.toggle()
+        }
+        return .handled
+    }
+    #endif
+
+    #if !os(macOS)
+    private var iosTodoList: some View {
+        List {
+            Section {
+                ForEach(incompleteTodos) { todo in
+                    TodoRowView(todo: todo)
+                        .onTapGesture { editingTodo = todo }
+                }
+                .onDelete { offsets in
+                    deleteTodos(from: incompleteTodos, at: offsets)
+                }
+                .onMove { source, destination in
+                    moveTodos(from: source, to: destination)
+                }
+            }
+
+            if !completedTodos.isEmpty {
+                Section {
+                    ForEach(completedTodos) { todo in
                         TodoRowView(todo: todo)
                             .onTapGesture { editingTodo = todo }
                     }
                     .onDelete { offsets in
-                        deleteTodos(from: incompleteTodos, at: offsets)
+                        deleteTodos(from: completedTodos, at: offsets)
                     }
-                    .onMove { source, destination in
-                        moveTodos(from: source, to: destination)
-                    }
-                }
-
-                if !completedTodos.isEmpty {
-                    Section {
-                        ForEach(completedTodos) { todo in
-                            TodoRowView(todo: todo)
-                                .onTapGesture { editingTodo = todo }
+                } header: {
+                    HStack {
+                        Text("Completed")
+                        Spacer()
+                        Button("Clear") {
+                            clearCompleted()
                         }
-                        .onDelete { offsets in
-                            deleteTodos(from: completedTodos, at: offsets)
-                        }
-                    } header: {
-                        HStack {
-                            Text("Completed")
-                            Spacer()
-                            Button("Clear") {
-                                clearCompleted()
-                            }
-                            .font(.caption)
-                            .textCase(nil)
-                        }
+                        .font(.caption)
+                        .textCase(nil)
                     }
-                }
-            }
-            .navigationTitle("Todos")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showingAddSheet = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                }
-                ToolbarItem(placement: .automatic) {
-                    CloudKitSyncStatusView()
-                }
-                #if os(iOS)
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        showingSettings = true
-                    } label: {
-                        Image(systemName: "gear")
-                    }
-                }
-                #endif
-            }
-            .sheet(isPresented: $showingAddSheet) {
-                TodoDetailView()
-            }
-            .sheet(item: $editingTodo) { todo in
-                TodoDetailView(existingTodo: todo)
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .odinCreateNewTodo)) { _ in
-                showingAddSheet = true
-            }
-            #if os(iOS)
-            .sheet(isPresented: $showingSettings) {
-                NavigationStack {
-                    SettingsView()
-                        .toolbar {
-                            ToolbarItem(placement: .confirmationAction) {
-                                Button("Done") { showingSettings = false }
-                            }
-                        }
-                }
-            }
-            #endif
-            .overlay {
-                if todos.isEmpty {
-                    ContentUnavailableView(
-                        "No Todos",
-                        systemImage: "checklist",
-                        description: Text("Tap + to add a todo")
-                    )
                 }
             }
         }
     }
+    #endif
 
     private func deleteTodos(from list: [TodoItem], at offsets: IndexSet) {
         for index in offsets {
