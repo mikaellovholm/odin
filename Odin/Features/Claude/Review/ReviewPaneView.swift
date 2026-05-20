@@ -5,6 +5,12 @@ struct ReviewPaneView: View {
     @Bindable var viewModel: ReviewViewModel
     let parentSessionId: String?
     let workingDirectory: String
+    /// Deep-link from a finding's location header into the project panel.
+    /// `file` is the repo-relative path the reviewer reported; `line` is
+    /// 1-based or nil for file-level findings. The host (`ClaudeSessionDetailView`)
+    /// is responsible for showing the project panel and forwarding to
+    /// `ProjectPanelViewModel.openFile(at:line:)`.
+    let onOpenFile: (_ file: String, _ line: Int?) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -17,7 +23,11 @@ struct ReviewPaneView: View {
                     onFixAuto: { fixBulk(run: run, predicate: \.isUnfixedFixable) }
                 )
                 Divider()
-                FindingsList(run: run, onFix: { triggerFix($0) })
+                FindingsList(
+                    run: run,
+                    onFix: { triggerFix($0) },
+                    onOpenFile: onOpenFile
+                )
             } else {
                 emptyState
             }
@@ -255,6 +265,7 @@ private struct LocationGroup: Identifiable {
 private struct FindingsList: View {
     let run: ReviewRun
     let onFix: ([ReviewFinding]) -> Void
+    let onOpenFile: (_ file: String, _ line: Int?) -> Void
 
     private var groupedFiles: [(file: String, locations: [LocationGroup])] {
         let byFile = Dictionary(grouping: run.findings, by: \.file)
@@ -312,7 +323,8 @@ private struct FindingsList: View {
                             ForEach(group.locations) { location in
                                 LocationCard(
                                     group: location,
-                                    onFix: { onFix(location.findings) }
+                                    onFix: { onFix(location.findings) },
+                                    onOpenFile: onOpenFile
                                 )
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 6)
@@ -321,7 +333,8 @@ private struct FindingsList: View {
                         } header: {
                             FileSectionHeader(
                                 file: group.file,
-                                count: group.locations.reduce(0) { $0 + $1.findings.count }
+                                count: group.locations.reduce(0) { $0 + $1.findings.count },
+                                onOpen: { onOpenFile(group.file, nil) }
                             )
                         }
                     }
@@ -334,26 +347,34 @@ private struct FindingsList: View {
 private struct FileSectionHeader: View {
     let file: String
     let count: Int
+    let onOpen: () -> Void
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "doc.text")
-                .foregroundStyle(.secondary)
-            Text(file)
-                .font(.caption.monospaced())
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Text("\(count)")
-                .font(.caption2.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1)
-                .background(.quaternary, in: Capsule())
-            Spacer()
+        Button(action: onOpen) {
+            HStack(spacing: 6) {
+                Image(systemName: "doc.text")
+                    .foregroundStyle(.secondary)
+                Text(file)
+                    .font(.caption.monospaced())
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text("\(count)")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(.quaternary, in: Capsule())
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
+            .background(.regularMaterial)
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 4)
-        .background(.regularMaterial)
+        .buttonStyle(.plain)
+        .help("Open \(file) in the project panel")
+        .accessibilityLabel("Open \(file)")
+        .accessibilityHint("\(count) finding\(count == 1 ? "" : "s")")
     }
 }
 
@@ -362,13 +383,30 @@ private struct FileSectionHeader: View {
 private struct LocationCard: View {
     let group: LocationGroup
     let onFix: () -> Void
+    let onOpenFile: (_ file: String, _ line: Int?) -> Void
+    /// Per-finding disclosure state. Ephemeral by design — when the user
+    /// scrolls past a card or the review run gets replaced, we'd rather start
+    /// fresh than carry stale "expanded" flags around.
+    @State private var expandedFindings: Set<String> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             header
             ForEach(group.findings) { finding in
-                FindingDetail(finding: finding)
+                FindingDetail(
+                    finding: finding,
+                    isExpanded: expandedFindings.contains(finding.id),
+                    onToggle: { toggle(finding.id) }
+                )
             }
+        }
+    }
+
+    private func toggle(_ id: String) {
+        if expandedFindings.contains(id) {
+            expandedFindings.remove(id)
+        } else {
+            expandedFindings.insert(id)
         }
     }
 
@@ -387,9 +425,21 @@ private struct LocationCard: View {
                     .background(.quaternary, in: Capsule())
             }
             if let line = group.line {
-                Text(":\(line)")
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
+                Button {
+                    onOpenFile(group.file, line)
+                } label: {
+                    HStack(spacing: 2) {
+                        Image(systemName: "arrow.up.right.square")
+                            .font(.caption2)
+                        Text(":\(line)")
+                            .font(.caption.monospaced())
+                    }
+                    .foregroundStyle(Color.accentColor)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Open \(group.file):\(line) in the project panel")
+                .accessibilityLabel("Open \(group.file) at line \(line)")
             }
             Spacer()
             fixControl
@@ -501,25 +551,143 @@ private enum AggregateFixState {
 
 private struct FindingDetail: View {
     let finding: ReviewFinding
+    let isExpanded: Bool
+    let onToggle: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(finding.title)
-                .font(.callout)
-                .lineLimit(2)
-            Text(finding.detail)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(4)
-            if let suggestion = finding.suggestion {
-                Text(suggestion)
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(4)
-                    .padding(6)
-                    .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 4))
+        VStack(alignment: .leading, spacing: 6) {
+            Button(action: onToggle) {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .frame(width: 10)
+                        .padding(.top, 3)
+                    Text(finding.title)
+                        .font(.callout)
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(finding.title)
+            .accessibilityHint(isExpanded ? "Collapse details" : "Expand details")
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 8) {
+                    proseText(finding.detail)
+                    if let suggestion = finding.suggestion, !suggestion.isEmpty {
+                        suggestionView(suggestion)
+                    }
+                }
+                .padding(.leading, 16)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
+        .animation(.easeOut(duration: 0.12), value: isExpanded)
+    }
+
+    /// Render a body of prose with inline markdown (backticks → inline code).
+    /// `.inlineOnlyPreservingWhitespace` keeps newlines from the source string
+    /// instead of collapsing the whole thing onto one line — review descriptions
+    /// regularly span multiple paragraphs.
+    @ViewBuilder
+    private func proseText(_ raw: String) -> some View {
+        let attributed = (try? AttributedString(
+            markdown: raw,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )) ?? AttributedString(raw)
+        Text(attributed)
+            .font(.callout)
+            .foregroundStyle(.primary)
+            .textSelection(.enabled)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Suggestions usually contain a short prose intro followed by a fenced
+    /// code block, e.g. "Restore the return:\n```go\nif err != nil { … }\n```".
+    /// We split those parts and render the code with syntax highlighting.
+    @ViewBuilder
+    private func suggestionView(_ raw: String) -> some View {
+        let parts = SuggestionParser.parse(raw)
+        VStack(alignment: .leading, spacing: 6) {
+            if !parts.prose.isEmpty {
+                proseText(parts.prose)
+            }
+            if !parts.code.isEmpty {
+                codeBlock(parts.code, language: parts.language)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func codeBlock(_ code: String, language: String?) -> some View {
+        let lines = code.components(separatedBy: "\n")
+        let isDark = colorScheme == .dark
+        VStack(alignment: .leading, spacing: 1) {
+            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                Text(SyntaxHighlighter.shared.highlight(
+                    line: line.isEmpty ? " " : line,
+                    language: language,
+                    isDark: isDark
+                ))
+                .font(.system(.callout, design: .monospaced))
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            Color(nsColor: .textBackgroundColor).opacity(isDark ? 0.45 : 0.85),
+            in: RoundedRectangle(cornerRadius: 6)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(Color.secondary.opacity(0.15))
+        )
+    }
+}
+
+/// Minimal parser for the `prose…\n```lang\ncode\n``` ` shape that review
+/// findings emit in their `suggestion` field. No fence → everything is prose.
+private struct SuggestionParser {
+    struct Parts {
+        var prose: String
+        var code: String
+        var language: String?
+    }
+
+    static func parse(_ raw: String) -> Parts {
+        let lines = raw.components(separatedBy: "\n")
+        guard let openIndex = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("```") }) else {
+            return Parts(prose: raw, code: "", language: nil)
+        }
+        let openLine = lines[openIndex].trimmingCharacters(in: .whitespaces)
+        let language = String(openLine.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+        let prose = lines[..<openIndex]
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let afterFence = lines[(openIndex + 1)...]
+        let closeRelative = afterFence.firstIndex { $0.trimmingCharacters(in: .whitespaces) == "```" }
+        let codeSlice: ArraySlice<String>
+        if let closeRelative {
+            codeSlice = afterFence[..<closeRelative]
+        } else {
+            codeSlice = afterFence
+        }
+        let code = codeSlice.joined(separator: "\n")
+        return Parts(
+            prose: prose,
+            code: code,
+            language: language.isEmpty ? nil : language
+        )
     }
 }
 

@@ -96,7 +96,20 @@ struct ClaudeSessionDetailView: View {
                     ReviewPaneView(
                         viewModel: session.reviewViewModel,
                         parentSessionId: viewModel.sessionId,
-                        workingDirectory: session.workingDirectory
+                        workingDirectory: session.workingDirectory,
+                        onOpenFile: { relPath, line in
+                            // Reviewer findings carry repo-relative paths; the
+                            // project panel works in absolute URLs. Resolve
+                            // against the session's worktree root, then make
+                            // sure the panel is visible before handing the
+                            // deep-link to the view model.
+                            let url = URL(fileURLWithPath: session.workingDirectory)
+                                .appendingPathComponent(relPath)
+                            if !session.projectPanelVisible {
+                                session.projectPanelVisible = true
+                            }
+                            session.projectViewModel.openFile(at: url, line: line)
+                        }
                     )
                     .frame(minWidth: 320, idealWidth: 400, maxHeight: .infinity)
                 }

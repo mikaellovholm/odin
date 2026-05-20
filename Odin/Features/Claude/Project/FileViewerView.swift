@@ -63,10 +63,37 @@ struct FileViewerView: View {
         }
         // Opening a new file (by any path — click, Enter, etc.) resets the
         // cursor too. Without this, the cursor could land beyond the new
-        // file's last line when switching from a longer file.
+        // file's last line when switching from a longer file. A queued
+        // `pendingFocusLine` (set by an external deep-link like the review
+        // pane) takes precedence and is applied once content arrives below.
         .onChange(of: viewModel.selectedFileURL) { _, _ in
             focusedLine = 0
         }
+        // If a deep-link arrived for the file already open (no URL change),
+        // apply the pending line as soon as it's set. For brand-new files,
+        // `cachedLines` is empty here and the content-arrival handler in
+        // `content` picks it up instead.
+        .onChange(of: viewModel.pendingFocusLine) { _, newValue in
+            applyPendingFocusLineIfReady(newValue)
+        }
+    }
+
+    /// Clamp the pending line to the loaded file's line count, grab keyboard
+    /// focus, and clear the pending slot. No-op when the cache isn't ready for
+    /// the currently-selected file — the content-arrival handler retries.
+    /// Critically, we check that the cache key matches the current URL before
+    /// applying: when a deep-link switches files, `pendingFocusLine` is set
+    /// while `cachedLines` still holds the *previous* file's lines, and naively
+    /// applying would (a) clamp to the wrong line count, (b) prematurely clear
+    /// the pending slot before the new file's content arrives.
+    private func applyPendingFocusLineIfReady(_ line: Int?) {
+        guard let line else { return }
+        guard !cachedLines.isEmpty else { return }
+        let currentURL = viewModel.selectedFileURL?.path ?? ""
+        guard let key = cachedLinesKey, key.hasPrefix("\(currentURL)|") else { return }
+        focusedLine = min(max(0, line), cachedLines.count - 1)
+        DispatchQueue.main.async { contentFocused = true }
+        viewModel.pendingFocusLine = nil
     }
 
     private var header: some View {
@@ -112,10 +139,17 @@ struct FileViewerView: View {
                 // Recompute the line split only when the file content actually
                 // changes — without this, every arrow keypress would re-split
                 // a potentially-huge file as a side-effect of body re-eval.
-                .onAppear { refreshCachedLines(text: text) }
-                .onChange(of: viewModel.selectedFileURL) { _, _ in refreshCachedLines(text: text) }
+                .onAppear {
+                    refreshCachedLines(text: text)
+                    applyPendingFocusLineIfReady(viewModel.pendingFocusLine)
+                }
+                .onChange(of: viewModel.selectedFileURL) { _, _ in
+                    refreshCachedLines(text: text)
+                    applyPendingFocusLineIfReady(viewModel.pendingFocusLine)
+                }
                 .onChange(of: viewModel.selectedFileContent) { _, newText in
                     refreshCachedLines(text: newText ?? "")
+                    applyPendingFocusLineIfReady(viewModel.pendingFocusLine)
                 }
         } else {
             placeholder(icon: "exclamationmark.triangle", title: "Couldn't read file", progress: false)

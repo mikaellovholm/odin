@@ -41,6 +41,12 @@ final class ProjectPanelViewModel {
     var focusTarget: FocusTarget = .tree
     var focusGeneration: Int = 0
 
+    /// 0-indexed line to focus in the viewer once content arrives. Set by
+    /// `openFile(at:line:)` for cross-feature deep links (e.g. the review pane's
+    /// clickable line numbers). `FileViewerView` consumes it on content-load and
+    /// clears it back to nil.
+    var pendingFocusLine: Int?
+
     /// Bumped on every `reload` so stale tree loads can be ignored.
     private var loadGeneration = 0
     /// Bumped on every file `select` so a slow load for a since-deselected file
@@ -80,6 +86,10 @@ final class ProjectPanelViewModel {
     func select(node: ProjectFileNode) {
         guard !node.isDirectory else { return }
         if selectedFileURL == node.url { return }
+        // Clear any pending deep-link focus line — a tree-driven open should
+        // start on line 1, not on a stale line from a previous unanswered
+        // deep-link (e.g. one whose target file failed to load).
+        pendingFocusLine = nil
         selectedFileURL = node.url
         selectedFileContent = nil
         selectedFileIsBinary = false
@@ -100,6 +110,41 @@ final class ProjectPanelViewModel {
         }
     }
 
+    /// Open a file by URL (no tree lookup needed) and optionally focus a
+    /// specific 1-based line once content has loaded. Used by deep links from
+    /// other panels — most notably the review pane's clickable line numbers.
+    /// Safe to call when the tree hasn't loaded yet; the viewer column drives
+    /// off `selectedFileURL`, not tree state.
+    func openFile(at url: URL, line: Int? = nil) {
+        let zeroIndexed = line.map { max(0, $0 - 1) }
+        if selectedFileURL == url {
+            // Same file already open — just bump the focus line (if any) and
+            // re-grab keyboard focus for the viewer.
+            pendingFocusLine = zeroIndexed
+            requestFocus(.viewer)
+            return
+        }
+        pendingFocusLine = zeroIndexed
+        selectedFileURL = url
+        selectedFileContent = nil
+        selectedFileIsBinary = false
+        selectedFileTruncated = false
+        selectedFileLanguage = nil
+        selectedFileIsLoading = true
+        fileLoadGeneration &+= 1
+        let gen = fileLoadGeneration
+        Task { @MainActor in
+            let content = await ProjectService.loadFileContent(url: url)
+            guard gen == fileLoadGeneration, selectedFileURL == url else { return }
+            selectedFileContent = content.text
+            selectedFileIsBinary = content.isBinary
+            selectedFileTruncated = content.truncated
+            selectedFileLanguage = content.language
+            selectedFileIsLoading = false
+        }
+        requestFocus(.viewer)
+    }
+
     /// Close the file viewer.
     func clearSelection() {
         selectedFileURL = nil
@@ -108,6 +153,7 @@ final class ProjectPanelViewModel {
         selectedFileTruncated = false
         selectedFileLanguage = nil
         selectedFileIsLoading = false
+        pendingFocusLine = nil
         fileLoadGeneration &+= 1
     }
 
