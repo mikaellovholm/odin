@@ -85,6 +85,7 @@ struct ClaudeSessionDetailView: View {
                         viewModel: session.projectViewModel
                     )
                     .frame(minWidth: 280, idealWidth: 600, maxHeight: .infinity)
+                    .layoutPriority(1)
                 }
                 leftColumn
                     .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)

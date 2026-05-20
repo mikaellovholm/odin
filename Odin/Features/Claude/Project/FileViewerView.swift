@@ -35,17 +35,23 @@ struct FileViewerView: View {
         .focusable()
         .focused($contentFocused)
         .focusEffectDisabled()
-        .onKeyPress(keys: [.upArrow, .downArrow]) { press in
-            guard !cachedLines.isEmpty else { return .ignored }
+        .onKeyPress(keys: [.upArrow, .downArrow, .escape]) { press in
             switch press.key {
+            case .escape:
+                viewModel.clearSelection()
+                viewModel.requestFocus(.tree)
+                return .handled
             case .upArrow:
+                guard !cachedLines.isEmpty else { return .ignored }
                 focusedLine = max(0, focusedLine - 1)
+                return .handled
             case .downArrow:
+                guard !cachedLines.isEmpty else { return .ignored }
                 focusedLine = min(cachedLines.count - 1, focusedLine + 1)
+                return .handled
             default:
                 return .ignored
             }
-            return .handled
         }
         // VM bumps the generation counter when the user presses Enter on a
         // file in the tree. We grab keyboard focus and reset to line 1.
@@ -71,14 +77,24 @@ struct FileViewerView: View {
                 .lineLimit(1)
                 .truncationMode(.head)
             Spacer()
+            Text("esc")
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .background(
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color.primary.opacity(0.08))
+                )
             Button {
                 viewModel.clearSelection()
+                viewModel.requestFocus(.tree)
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .semibold))
             }
             .buttonStyle(.borderless)
-            .help("Close file")
+            .help("Close file (Esc)")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
