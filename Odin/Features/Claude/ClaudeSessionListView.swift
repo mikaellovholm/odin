@@ -223,7 +223,7 @@ struct ClaudeSessionListView: View {
         alert.addButton(withTitle: "Cancel")
 
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
-        field.placeholderString = "branch-name"
+        field.placeholderString = "worktree-name"
 
         let checkbox = NSButton(
             checkboxWithTitle: "Use this folder directly (no worktree)",

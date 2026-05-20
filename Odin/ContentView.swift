@@ -13,27 +13,63 @@ struct ContentView: View {
     var body: some View {
         TabView(selection: $selectedTab) {
             #if os(macOS)
-            Tab(tabTitle("Claude", shortcut: "⌃1"), systemImage: "brain", value: .claude) {
+            Tab(value: AppTab.claude) {
                 ClaudeSessionListView()
+            } label: {
+                Label {
+                    tabTitleText("Claude", shortcut: "⌃1")
+                } icon: {
+                    Image(systemName: "brain")
+                }
             }
-            #endif
-            Tab(tabTitle("Terminal", shortcut: "⌃2"), systemImage: "terminal", value: .terminal) {
+            Tab(value: AppTab.terminal) {
+                TerminalContainerView(selectedTab: $selectedTab)
+            } label: {
+                Label {
+                    tabTitleText("Terminal", shortcut: "⌃2")
+                } icon: {
+                    Image(systemName: "terminal")
+                }
+            }
+            Tab(value: AppTab.notes) {
+                NoteListView()
+            } label: {
+                Label {
+                    tabTitleText("Notes", shortcut: "⌃3")
+                } icon: {
+                    Image(systemName: "note.text")
+                }
+            }
+            Tab(value: AppTab.todos) {
+                TodoListView()
+            } label: {
+                Label {
+                    tabTitleText("Todos", shortcut: "⌃4")
+                } icon: {
+                    Image(systemName: "checklist")
+                }
+            }
+            #else
+            Tab("Terminal", systemImage: "terminal", value: AppTab.terminal) {
                 TerminalContainerView(selectedTab: $selectedTab)
             }
-            Tab(tabTitle("Notes", shortcut: "⌃3"), systemImage: "note.text", value: .notes) {
+            Tab("Notes", systemImage: "note.text", value: AppTab.notes) {
                 NoteListView()
             }
-            Tab(tabTitle("Todos", shortcut: "⌃4"), systemImage: "checklist", value: .todos) {
+            Tab("Todos", systemImage: "checklist", value: AppTab.todos) {
                 TodoListView()
             }
+            #endif
         }
     }
 
-    private func tabTitle(_ name: String, shortcut: String) -> String {
-        #if os(macOS)
-        return "\(name)  \(shortcut)"
-        #else
-        return name
-        #endif
+    #if os(macOS)
+    private func tabTitleText(_ name: String, shortcut: String) -> Text {
+        var attr = AttributedString("\(name)  ")
+        var shortcutAttr = AttributedString(shortcut)
+        shortcutAttr.foregroundColor = .secondary
+        attr.append(shortcutAttr)
+        return Text(attr)
     }
+    #endif
 }
