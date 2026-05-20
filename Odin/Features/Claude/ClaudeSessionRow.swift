@@ -5,6 +5,7 @@ struct ClaudeSessionRow: View {
     let session: ClaudeSession
     let shortcutNumber: Int?
     let isSelected: Bool
+    let onRemove: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -18,8 +19,19 @@ struct ClaudeSessionRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            removeButton
         }
         .padding(.vertical, 2)
+    }
+
+    private var removeButton: some View {
+        Button(action: onRemove) {
+            Image(systemName: "xmark.circle.fill")
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.borderless)
+        .help("Remove session")
     }
 
     @ViewBuilder
