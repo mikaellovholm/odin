@@ -9,11 +9,18 @@ import Foundation
 ///      under `UserPromptSubmit`. Its stdout is injected into Claude's next
 ///      assistant turn so Claude learns about completed background tasks.
 ///   2. `~/.claude/hooks/odin-status.sh <state>` — writes the current Claude
-///      lifecycle state to `~/.claude/odin-status/<ODIN_SESSION_ID>.state`.
-///      Registered for `UserPromptSubmit` (working), `Stop` (idle),
-///      `Notification` (awaiting-input), `SessionEnd` (delete). The Odin app
-///      watches the state file to drive the sidebar status dot — far more
-///      reliable than parsing the spinner braille char from the terminal title.
+///      lifecycle state to `~/.claude/odin-status/<ODIN_SESSION_ID>.state`,
+///      and maintains a per-session subagent marker directory at
+///      `~/.claude/odin-status/<ODIN_SESSION_ID>.subagents/`. Registered for:
+///      `UserPromptSubmit` / `PreToolUse` / `PostToolUse` / `PostCompact`
+///      (working — the last three act as a PTY-silence heartbeat keepalive),
+///      `Stop` (idle), `Notification` (awaiting-input), `PermissionRequest`
+///      (awaiting-permission), `PreCompact` (compacting),
+///      `SubagentStart` / `SubagentStop` (add/remove a marker and nudge the
+///      state file so the watcher recounts), and `SessionEnd` (delete). The
+///      Odin app watches the state file to drive the sidebar status dot —
+///      far more reliable than parsing the spinner braille char from the
+///      terminal title.
 ///
 /// `settings.json` entries are merged idempotently; existing entries are
 /// preserved.
@@ -58,7 +65,8 @@ enum OdinHookInstaller {
     # Auto-installed by Odin. Writes the current Claude lifecycle state to a
     # per-session file the Odin app watches for sidebar indicator updates.
     # Driven by Claude Code lifecycle hooks (UserPromptSubmit/Stop/Notification/
-    # SessionEnd) passing a state name as the first argument.
+    # SessionEnd plus PreToolUse/PostToolUse keepalive, PermissionRequest,
+    # Pre/PostCompact, Subagent{Start,Stop}) passing a state name as $1.
     set -e
     [[ -n "$ODIN_SESSION_ID" ]] || exit 0
     STATE="${1:-}"
@@ -66,12 +74,34 @@ enum OdinHookInstaller {
     DIR="$HOME/.claude/odin-status"
     mkdir -p "$DIR"
     FILE="$DIR/$ODIN_SESSION_ID.state"
+    SUBAGENT_DIR="$DIR/$ODIN_SESSION_ID.subagents"
     case "$STATE" in
-        working|idle|awaiting-input)
+        working|idle|awaiting-input|awaiting-permission|compacting)
             printf '%s\n' "$STATE" > "$FILE"
+            ;;
+        subagent-start)
+            mkdir -p "$SUBAGENT_DIR"
+            # Unique per-start marker. BSD `date` (macOS default) doesn't
+            # grok `%N` and emits a literal "N"; fall back to seconds +
+            # $RANDOM in that case. GNU `date` (if installed) returns
+            # nanoseconds normally.
+            TS=$(date +%s%N 2>/dev/null)
+            case "$TS" in *N) TS=$(date +%s)-$RANDOM ;; esac
+            touch "$SUBAGENT_DIR/$TS-$$"
+            # Nudge the state file so the watcher re-fires and the app
+            # re-reads the subagent dir count.
+            [[ -f "$FILE" ]] && touch "$FILE"
+            ;;
+        subagent-stop)
+            if [[ -d "$SUBAGENT_DIR" ]]; then
+                FIRST=$(ls "$SUBAGENT_DIR" 2>/dev/null | head -1)
+                [[ -n "$FIRST" ]] && rm -f "$SUBAGENT_DIR/$FIRST"
+            fi
+            [[ -f "$FILE" ]] && touch "$FILE"
             ;;
         delete)
             rm -f "$FILE"
+            rm -rf "$SUBAGENT_DIR"
             ;;
     esac
     """#
@@ -109,8 +139,25 @@ enum OdinHookInstaller {
         [
             ("UserPromptSubmit", pendingScriptPath),
             ("UserPromptSubmit", "\(statusScriptPath) working"),
+            // PreToolUse/PostToolUse fire around every tool call and act as
+            // a keepalive — they refresh the heartbeat so a long-running tool
+            // doesn't get falsely promoted to "awaiting input" after a few
+            // seconds of PTY silence.
+            ("PreToolUse", "\(statusScriptPath) working"),
+            ("PostToolUse", "\(statusScriptPath) working"),
             ("Stop", "\(statusScriptPath) idle"),
             ("Notification", "\(statusScriptPath) awaiting-input"),
+            // Dedicated permission-prompt signal, distinct from generic
+            // awaiting-input. Drives the cyan urgent-attention dot.
+            ("PermissionRequest", "\(statusScriptPath) awaiting-permission"),
+            // Context compaction: Claude is neither idle nor working in the
+            // normal sense — show a distinct compacting indicator.
+            ("PreCompact", "\(statusScriptPath) compacting"),
+            ("PostCompact", "\(statusScriptPath) working"),
+            // Subagent lifecycle: maintain a per-session count for the
+            // sidebar badge.
+            ("SubagentStart", "\(statusScriptPath) subagent-start"),
+            ("SubagentStop", "\(statusScriptPath) subagent-stop"),
             ("SessionEnd", "\(statusScriptPath) delete"),
         ]
     }
