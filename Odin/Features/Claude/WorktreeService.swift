@@ -132,6 +132,43 @@ enum WorktreeService {
         throw WorktreeError.defaultBranchUnknown
     }
 
+    /// If `path` is a linked worktree, returns the main worktree's path.
+    /// Returns `nil` for the main worktree itself, a non-worktree git repo,
+    /// or any non-git folder — i.e. "nothing to prompt about on removal".
+    static func mainWorktreePath(for path: String) async -> String? {
+        let common = await runGit(["rev-parse", "--git-common-dir"], cwd: path)
+        let gitDir = await runGit(["rev-parse", "--git-dir"], cwd: path)
+        guard common.exitCode == 0, gitDir.exitCode == 0 else { return nil }
+        let absCommon = absolutize(common.output, relativeTo: path)
+        let absDir = absolutize(gitDir.output, relativeTo: path)
+        // Main worktree: --git-dir and --git-common-dir resolve to the same
+        // place. Linked worktree: --git-dir points inside the main repo's
+        // `.git/worktrees/<name>`, --git-common-dir points at the main `.git`.
+        if absCommon == absDir { return nil }
+        return URL(fileURLWithPath: absCommon).deletingLastPathComponent().path
+    }
+
+    /// Deletes a linked worktree by running `git worktree remove --force` from
+    /// the main worktree. `--force` is intentional: the branch and any commits
+    /// stay in the main repo's refs, so the only thing at risk is uncommitted
+    /// changes — which the caller is expected to have warned the user about.
+    static func removeWorktree(target: String, mainPath: String) async throws {
+        let result = await runGit(["worktree", "remove", "--force", "--", target], cwd: mainPath)
+        guard result.exitCode == 0 else {
+            let message = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw WorktreeError.gitFailed(message.isEmpty ? "exit \(result.exitCode)" : message)
+        }
+    }
+
+    private static func absolutize(_ raw: String, relativeTo cwd: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("/") { return trimmed }
+        return URL(fileURLWithPath: cwd)
+            .appendingPathComponent(trimmed)
+            .standardizedFileURL
+            .path
+    }
+
     private struct GitResult {
         let exitCode: Int32
         let output: String

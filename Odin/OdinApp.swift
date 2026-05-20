@@ -24,14 +24,6 @@ struct OdinApp: App {
         }
 
         #if os(macOS)
-        // Migrate any pre-existing `claude.diffPaneVisible` Bool to the new
-        // `claude.rightPaneMode` enum so users who explicitly hid the diff
-        // pane don't get reset to `.diff` on first run. Runs synchronously
-        // before SwiftUI ever reads the AppStorage key — otherwise the very
-        // first view evaluation could read the default `.diff` and then flip
-        // to `.hidden` a tick later once the async task fires.
-        RightPaneMode.migrateLegacyKeyIfNeeded()
-
         Task { @MainActor in
             OdinSkillInstaller.install()
             OdinHookInstaller.install()
@@ -58,21 +50,13 @@ struct OdinApp: App {
         #if os(macOS)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("New Claude Session") {
-                    selectedTab = .claude
-                    NotificationCenter.default.post(name: .odinCreateNewClaudeSession, object: nil)
-                }
-                .keyboardShortcut("n", modifiers: [.command])
-                Button("New Note") {
-                    selectedTab = .notes
-                    NotificationCenter.default.post(name: .odinCreateNewNote, object: nil)
-                }
-                .keyboardShortcut("n", modifiers: [.command, .shift])
-                Button("New Todo") {
-                    selectedTab = .todos
-                    NotificationCenter.default.post(name: .odinCreateNewTodo, object: nil)
-                }
-                .keyboardShortcut("t", modifiers: [.command, .option])
+                /// ⌘N is context-sensitive: the title and effect track
+                /// `selectedTab` so a single shortcut creates a new item in
+                /// whichever pane is showing. Disabled on Terminal (no
+                /// "new" concept there).
+                Button(newItemTitle) { performNewItem() }
+                    .keyboardShortcut("n", modifiers: [.command])
+                    .disabled(selectedTab == .terminal)
             }
             CommandMenu("Go") {
                 Button("Claude") { selectedTab = .claude }
@@ -95,4 +79,28 @@ struct OdinApp: App {
         }
         #endif
     }
+
+    #if os(macOS)
+    private var newItemTitle: String {
+        switch selectedTab {
+        case .claude:   return "New Claude Session"
+        case .notes:    return "New Note"
+        case .todos:    return "New Todo"
+        case .terminal: return "New"
+        }
+    }
+
+    private func performNewItem() {
+        switch selectedTab {
+        case .claude:
+            NotificationCenter.default.post(name: .odinCreateNewClaudeSession, object: nil)
+        case .notes:
+            NotificationCenter.default.post(name: .odinCreateNewNote, object: nil)
+        case .todos:
+            NotificationCenter.default.post(name: .odinCreateNewTodo, object: nil)
+        case .terminal:
+            break
+        }
+    }
+    #endif
 }

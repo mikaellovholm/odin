@@ -26,6 +26,11 @@ final class ClaudeSession: Identifiable {
     /// Per-session visibility of the project panel. Toggled by ⇧⌘P on the
     /// active session; not persisted across app launches.
     var projectPanelVisible: Bool = false
+    /// Per-session right-pane mode (diff / review / hidden). Toggled by ⇧⌘D
+    /// and ⇧⌘R on the active session; not persisted across app launches so
+    /// new sessions always start hidden and one tab's pane choice doesn't
+    /// follow you into another.
+    var rightPaneMode: RightPaneMode = .hidden
 
     init(workingDirectory: String, id: UUID = UUID()) {
         self.id = id

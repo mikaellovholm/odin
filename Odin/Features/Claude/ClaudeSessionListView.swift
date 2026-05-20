@@ -111,12 +111,13 @@ struct ClaudeSessionListView: View {
                 ClaudeSessionRow(
                     session: session,
                     shortcutNumber: index < 9 ? index + 1 : nil,
-                    isSelected: store.selectedSessionID == session.id
+                    isSelected: store.selectedSessionID == session.id,
+                    onRemove: { removeSession(session) }
                 )
                 .tag(session.id)
                 .contextMenu {
                     Button("Remove", role: .destructive) {
-                        store.remove(session)
+                        removeSession(session)
                     }
                 }
             }
@@ -251,9 +252,43 @@ struct ClaudeSessionListView: View {
         return trimmed.isEmpty ? nil : .worktree(name: trimmed)
     }
 
+    /// Removes a session, and if the session's working directory is a linked
+    /// git worktree, asks first whether to also delete the worktree on disk.
+    /// Direct-mode sessions and main-repo sessions skip the prompt.
+    private func removeSession(_ session: ClaudeSession) {
+        let path = session.workingDirectory
+        Task { @MainActor in
+            let main = await WorktreeService.mainWorktreePath(for: path)
+            guard let mainPath = main else {
+                store.remove(session)
+                return
+            }
+            let alert = NSAlert()
+            alert.messageText = "Remove session"
+            alert.informativeText = "Also delete the worktree on disk?\n\n\(path)\n\nThe branch and its commits are preserved in the main repo; only the working directory is removed. Uncommitted changes will be lost."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Delete worktree")
+            alert.addButton(withTitle: "Keep worktree")
+            alert.addButton(withTitle: "Cancel")
+            switch alert.runModal() {
+            case .alertFirstButtonReturn:
+                store.remove(session)
+                do {
+                    try await WorktreeService.removeWorktree(target: path, mainPath: mainPath)
+                } catch {
+                    presentError(error)
+                }
+            case .alertSecondButtonReturn:
+                store.remove(session)
+            default:
+                break
+            }
+        }
+    }
+
     private func presentError(_ error: Error) {
         let alert = NSAlert()
-        alert.messageText = "Couldn't create worktree"
+        alert.messageText = "Git command failed"
         alert.informativeText = (error as? LocalizedError)?.errorDescription ?? "\(error)"
         alert.alertStyle = .warning
         alert.runModal()

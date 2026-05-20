@@ -6,58 +6,38 @@ struct ClaudeSessionDetailView: View {
     @State private var keyboardDismissed = false
     @AppStorage(TerminalFontSettings.key) private var fontSize: Double = Double(TerminalFontSettings.defaultSize)
     @AppStorage("claude.shellPaneVisible") private var shellPaneVisible: Bool = false
-    /// Three-state right pane: hidden / diff / review. Mutually exclusive by
-    /// design — diff and review can't show at the same time (the user picked
-    /// "separate toggleable pane" in the planning Q&A). New default is `.diff`
-    /// to match the previous `diffPaneVisible: true` default; users who toggled
-    /// the old key lose that preference but land on the same state.
-    @AppStorage(RightPaneMode.storageKey) private var rightPaneMode: RightPaneMode = .diff
 
     private var viewModel: LocalTerminalViewModel { session.viewModel }
 
     var body: some View {
         composedBody
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        session.projectPanelVisible.toggle()
-                    } label: {
-                        Image(systemName: session.projectPanelVisible ? "folder.fill" : "folder")
-                    }
-                    .help(session.projectPanelVisible ? "Hide project panel" : "Show project panel")
-                    .keyboardShortcut("p", modifiers: [.command, .shift])
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        shellPaneVisible.toggle()
-                    } label: {
-                        Image(systemName: shellPaneVisible ? "rectangle.bottomthird.inset.filled" : "rectangle.bottomthird.inset")
-                    }
-                    .help(shellPaneVisible ? "Hide terminal panel" : "Show terminal panel")
-                    .keyboardShortcut("t", modifiers: [.command, .shift])
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        rightPaneMode = (rightPaneMode == .diff) ? .hidden : .diff
-                    } label: {
-                        Image(systemName: rightPaneMode == .diff ? "sidebar.right" : "sidebar.squares.right")
-                    }
-                    .help(rightPaneMode == .diff ? "Hide diff pane" : "Show diff pane")
-                    .keyboardShortcut("d", modifiers: [.command, .shift])
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        rightPaneMode = (rightPaneMode == .review) ? .hidden : .review
-                    } label: {
-                        Text("⚖️")
-                    }
-                    .help(rightPaneMode == .review ? "Hide review pane" : "Show review pane")
-                    .keyboardShortcut("r", modifiers: [.command, .shift])
-                }
-            }
+            .background(paneShortcuts)
             .onChange(of: shellPaneVisible) { _, newValue in
                 if newValue { focusShell() }
             }
+    }
+
+    /// Hidden buttons that register ⇧⌘P / ⇧⌘T / ⇧⌘D / ⇧⌘R as pane toggles.
+    /// Replaces the toolbar buttons so the window matches the Notes / Sessions
+    /// chromeless look; the sidebar's shortcut-hints footer documents them.
+    private var paneShortcuts: some View {
+        ZStack {
+            Button("") { session.projectPanelVisible.toggle() }
+                .keyboardShortcut("p", modifiers: [.command, .shift])
+            Button("") { shellPaneVisible.toggle() }
+                .keyboardShortcut("t", modifiers: [.command, .shift])
+            Button("") {
+                session.rightPaneMode = (session.rightPaneMode == .diff) ? .hidden : .diff
+            }
+            .keyboardShortcut("d", modifiers: [.command, .shift])
+            Button("") {
+                session.rightPaneMode = (session.rightPaneMode == .review) ? .hidden : .review
+            }
+            .keyboardShortcut("r", modifiers: [.command, .shift])
+        }
+        .frame(width: 0, height: 0)
+        .opacity(0)
+        .allowsHitTesting(false)
     }
 
     /// HSplitView columns from left to right (each conditional):
@@ -69,7 +49,7 @@ struct ClaudeSessionDetailView: View {
     private var composedBody: some View {
         let projectVisible = session.projectPanelVisible
         let fileVisible = projectVisible && session.projectViewModel.selectedFileURL != nil
-        let rightVisible = rightPaneMode != .hidden
+        let rightVisible = session.rightPaneMode != .hidden
 
         if !projectVisible && !rightVisible {
             leftColumn
@@ -89,10 +69,10 @@ struct ClaudeSessionDetailView: View {
                 }
                 leftColumn
                     .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
-                if rightPaneMode == .diff {
+                if session.rightPaneMode == .diff {
                     DiffPaneView(viewModel: session.diffViewModel)
                         .frame(minWidth: 280, idealWidth: 360, maxHeight: .infinity)
-                } else if rightPaneMode == .review {
+                } else if session.rightPaneMode == .review {
                     ReviewPaneView(
                         viewModel: session.reviewViewModel,
                         parentSessionId: viewModel.sessionId,

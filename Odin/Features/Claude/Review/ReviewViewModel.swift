@@ -3,36 +3,13 @@ import Foundation
 import SwiftUI
 
 /// Right-side panel mode for a Claude session. Mutually exclusive: only one
-/// pane shows at a time. Stored in AppStorage so the choice persists across
-/// app launches. `hidden` lets the terminal use the full width.
+/// pane shows at a time. Lives on `ClaudeSession` so each tab tracks its own
+/// state — toggling review on one session doesn't bleed into another.
+/// `hidden` lets the terminal use the full width.
 enum RightPaneMode: String {
     case hidden
     case diff
     case review
-
-    /// AppStorage key. Shared between the view and the migration helper so
-    /// they can't drift.
-    static let storageKey = "claude.rightPaneMode"
-
-    /// Old boolean AppStorage key from the diff-only era. The migration
-    /// helper translates `true → .diff`, `false → .hidden`, then deletes the
-    /// old key so the user's explicit "hide the pane" choice is preserved.
-    private static let legacyVisibilityKey = "claude.diffPaneVisible"
-
-    /// Called once at app launch, synchronously from `OdinApp.init` so SwiftUI
-    /// never sees the unmigrated state. Idempotent: skips if the new key is
-    /// already set or the legacy key was never written. `UserDefaults` is
-    /// thread-safe, so this is not pinned to the main actor.
-    nonisolated static func migrateLegacyKeyIfNeeded() {
-        let defaults = UserDefaults.standard
-        guard defaults.object(forKey: legacyVisibilityKey) != nil else { return }
-        if defaults.object(forKey: storageKey) == nil {
-            let wasVisible = defaults.bool(forKey: legacyVisibilityKey)
-            let migrated: RightPaneMode = wasVisible ? .diff : .hidden
-            defaults.set(migrated.rawValue, forKey: storageKey)
-        }
-        defaults.removeObject(forKey: legacyVisibilityKey)
-    }
 }
 
 /// Per-session review panel state. Owned by `ClaudeSession` so it survives

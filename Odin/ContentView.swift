@@ -104,31 +104,26 @@ private struct MacTabItem: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 6) {
-                HStack(spacing: 8) {
-                    Image(systemName: item.icon)
-                        .font(.system(size: 14, weight: .medium))
-                    Text(item.label)
-                        .font(.system(size: 14, weight: isSelected ? .semibold : .regular))
-                    Text(item.shortcut)
-                        .font(.system(size: 11, weight: .regular))
-                        .foregroundStyle(.tertiary)
-                }
-                .foregroundStyle(textColor)
-
-                ZStack {
-                    Rectangle()
-                        .fill(Color.clear)
+            HStack(spacing: 8) {
+                Image(systemName: item.icon)
+                    .font(.system(size: 14, weight: .medium))
+                Text(item.label)
+                    .font(.system(size: 14, weight: isSelected ? .semibold : .regular))
+                Text(item.shortcut)
+                    .font(.system(size: 11, weight: .regular))
+                    .foregroundStyle(.tertiary)
+            }
+            .foregroundStyle(textColor)
+            .padding(.horizontal, 4)
+            .padding(.bottom, 8)
+            .overlay(alignment: .bottom) {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(Color.accentColor)
                         .frame(height: 2)
-                    if isSelected {
-                        RoundedRectangle(cornerRadius: 1.5)
-                            .fill(Color.accentColor)
-                            .frame(height: 2)
-                            .matchedGeometryEffect(id: "underline", in: namespace)
-                    }
+                        .matchedGeometryEffect(id: "underline", in: namespace)
                 }
             }
-            .padding(.horizontal, 4)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

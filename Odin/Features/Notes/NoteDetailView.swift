@@ -4,7 +4,11 @@ import MarkdownUI
 struct NoteDetailView: View {
     @Bindable var note: Note
     @State private var showPreview = false
-    @State private var saveTask: Task<Void, Never>?
+    /// Set on the first edit; consumed on view-disappear to bump
+    /// `note.updatedAt` exactly once per editing session. Keeping it scoped to
+    /// disappear (instead of bumping on every keystroke) means the sidebar
+    /// only reshuffles when you leave the note — not while you type.
+    @State private var hasUnsavedChanges = false
     @FocusState private var titleFocused: Bool
     @State private var viewWidth: CGFloat = 0
 
@@ -59,8 +63,13 @@ struct NoteDetailView: View {
                 titleFocused = true
             }
         }
-        .onChange(of: note.title) { debouncedSave() }
-        .onChange(of: note.content) { debouncedSave() }
+        .onChange(of: note.title) { hasUnsavedChanges = true }
+        .onChange(of: note.content) { hasUnsavedChanges = true }
+        .onDisappear {
+            if hasUnsavedChanges {
+                note.updatedAt = Date()
+            }
+        }
     }
 
     private var editorView: some View {
@@ -83,14 +92,6 @@ struct NoteDetailView: View {
         }
     }
 
-    private func debouncedSave() {
-        saveTask?.cancel()
-        saveTask = Task {
-            try? await Task.sleep(for: .seconds(1))
-            guard !Task.isCancelled else { return }
-            note.updatedAt = Date()
-        }
-    }
 }
 
 private struct ViewWidthKey: PreferenceKey {
