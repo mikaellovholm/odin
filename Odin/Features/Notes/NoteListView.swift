@@ -18,6 +18,10 @@ struct NoteListView: View {
     private var pinnedNotes: [Note] { filteredNotes.filter(\.isPinned) }
     private var unpinnedNotes: [Note] { filteredNotes.filter { !$0.isPinned } }
 
+    /// Visual order shown in the list: pinned section first, then unpinned.
+    /// ⌘1…⌘9 jump to the first nine entries of this combined list.
+    private var orderedNotes: [Note] { pinnedNotes + unpinnedNotes }
+
     var body: some View {
         NavigationSplitView {
             List(selection: $selectedNote) {
@@ -66,7 +70,26 @@ struct NoteListView: View {
         .onReceive(NotificationCenter.default.publisher(for: .odinCreateNewNote)) { _ in
             createNote()
         }
+        #if os(macOS)
+        .background(keyboardShortcuts)
+        #endif
     }
+
+    #if os(macOS)
+    /// Hidden buttons that register ⌘1…⌘9 as shortcuts for the first nine
+    /// notes in visual order (pinned first, then unpinned).
+    private var keyboardShortcuts: some View {
+        ZStack {
+            ForEach(Array(orderedNotes.prefix(9).enumerated()), id: \.element.id) { index, note in
+                Button("") { selectedNote = note }
+                    .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+            }
+        }
+        .frame(width: 0, height: 0)
+        .opacity(0)
+        .allowsHitTesting(false)
+    }
+    #endif
 
     private func noteLink(_ note: Note, pinAction: String, pinImage: String, newPinState: Bool) -> some View {
         NavigationLink(value: note) {
