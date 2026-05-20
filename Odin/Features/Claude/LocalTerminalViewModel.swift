@@ -33,9 +33,20 @@ final class LocalTerminalViewModel {
     /// Claude finished a turn without acknowledgement. Set when the hook-driven
     /// state transitions from `working` to `idle`; cleared by `acknowledge()`.
     var didFinish: Bool = false
-    /// Claude raised a `Notification` (permission prompt, idle reminder, etc).
-    /// Drives the green "needs attention" dot. Cleared by `acknowledge()`.
+    /// Claude raised a generic `Notification` (slash-menu, idle reminder, MCP
+    /// elicitation) or the PTY-silence heartbeat promoted a stuck session.
+    /// Drives the green "needs attention" dot.
     var awaitingInput: Bool = false
+    /// Claude raised a permission/approval prompt (`PermissionRequest` hook
+    /// or `Notification` matcher=permission_prompt). More urgent than
+    /// `awaitingInput`; drives the cyan dot. Outranks every other status.
+    var awaitingPermission: Bool = false
+    /// Claude is compacting context (`PreCompact` fired, `PostCompact` has
+    /// not). Drives the orange pulsing dot.
+    var isCompacting: Bool = false
+    /// Number of subagents this session has currently spawned via Claude
+    /// Code's Task tool (tracked by `SubagentStart`/`SubagentStop` hooks).
+    var activeSubagents: Int = 0
     var pendingNotifications: [BackgroundNotification] = []
 
     private(set) var sessionId: String?
@@ -48,6 +59,11 @@ final class LocalTerminalViewModel {
     private var statusFilePath: String?
     private var statusFileSource: DispatchSourceFileSystemObject?
 
+    /// Directory containing one marker file per running subagent. The hook
+    /// adds/removes files on `SubagentStart`/`SubagentStop`; the view model
+    /// recounts on every status-file watcher tick.
+    private var subagentDirPath: String?
+
     /// Timestamp of the last byte received from the child PTY. Used by the
     /// idle-heartbeat timer to detect Claude blocking on a slash-command menu
     /// or other interactive prompt that doesn't fire the `Notification` hook.
@@ -55,9 +71,13 @@ final class LocalTerminalViewModel {
     private var heartbeatTimer: DispatchSourceTimer?
 
     /// How long PTY output must be silent while `isActive` is true before we
-    /// promote the session to `awaitingInput`. 2s is short enough to feel
-    /// responsive but long enough to not trip on normal streaming pauses.
-    private static let heartbeatIdleThreshold: TimeInterval = 2.0
+    /// promote the session to `awaitingInput`. Bumped to 6s once PreToolUse /
+    /// PostToolUse hooks were wired to refresh `lastDataReceivedAt` — they
+    /// keep the heartbeat alive across long tool calls (Bash, MCP, etc.), so
+    /// we only fall back to PTY-silence detection for the genuine "Claude
+    /// printed a menu and is sitting on it" case, which doesn't need a 2s
+    /// reflex.
+    private static let heartbeatIdleThreshold: TimeInterval = 6.0
 
     private var process: LocalProcess?
     private var bridge: ProcessBridge?
@@ -149,11 +169,12 @@ final class LocalTerminalViewModel {
     /// indicator falls back to grey. Called when the user clicks the session
     /// row or when the session is the one currently being viewed.
     ///
-    /// `awaitingInput` is deliberately *not* cleared here: that flag means
-    /// "Claude is blocked on user input", which is only resolved by the user
-    /// actually submitting (UserPromptSubmit hook → state="working" → flag
-    /// clears via `applyHookState`). Clicking the row to look at the prompt
-    /// is not the same as responding to it.
+    /// `awaitingInput` and `awaitingPermission` are deliberately *not*
+    /// cleared here: those flags mean "Claude is blocked on user input /
+    /// approval", which is only resolved by the user actually responding
+    /// (UserPromptSubmit / PreToolUse hook → state="working" → flags clear
+    /// via `applyHookState`). Clicking the row to look at the prompt is not
+    /// the same as responding to it.
     func acknowledge() {
         didFinish = false
     }
@@ -171,6 +192,9 @@ final class LocalTerminalViewModel {
         isActive = false
         didFinish = false
         awaitingInput = false
+        awaitingPermission = false
+        isCompacting = false
+        activeSubagents = 0
         terminalView?.getTerminal().resetToInitialState()
         startClaude()
     }
@@ -188,8 +212,11 @@ final class LocalTerminalViewModel {
             try? FileManager.default.removeItem(atPath: pendingFile)
             let statusFile = NSHomeDirectory() + "/.claude/odin-status/\(oldId).state"
             try? FileManager.default.removeItem(atPath: statusFile)
+            let subagentDir = NSHomeDirectory() + "/.claude/odin-status/\(oldId).subagents"
+            try? FileManager.default.removeItem(atPath: subagentDir)
         }
         sessionId = nil
+        subagentDirPath = nil
         if let path = mcpConfigPath {
             try? FileManager.default.removeItem(atPath: path)
             mcpConfigPath = nil
@@ -200,9 +227,12 @@ final class LocalTerminalViewModel {
 
     /// Pre-creates the per-session state file and starts a `DispatchSource`
     /// watcher on it. The `odin-status.sh` hook (registered by
-    /// `OdinHookInstaller`) writes one of `working`, `idle`, `awaiting-input`
-    /// into this file on each Claude lifecycle event; we drive `isActive`,
-    /// `awaitingInput`, and `didFinish` from those writes.
+    /// `OdinHookInstaller`) writes one of `working`, `idle`, `awaiting-input`,
+    /// `awaiting-permission`, or `compacting` into this file on each Claude
+    /// lifecycle event; we drive `isActive`, `awaitingInput`,
+    /// `awaitingPermission`, `isCompacting`, and `didFinish` from those
+    /// writes. Subagent start/stop hooks `touch` the file (no content
+    /// change) so the same watcher triggers `refreshSubagentCount`.
     private func startStatusWatcher(sessionId: String) {
         let dir = NSHomeDirectory() + "/.claude/odin-status"
         try? FileManager.default.createDirectory(
@@ -210,6 +240,7 @@ final class LocalTerminalViewModel {
             withIntermediateDirectories: true
         )
         let path = dir + "/\(sessionId).state"
+        subagentDirPath = dir + "/\(sessionId).subagents"
         // Pre-create with empty content so we have a stable inode to watch.
         // Subsequent hook writes are truncate-and-overwrite (same inode), so a
         // single file-level kqueue source catches every state transition.
@@ -224,7 +255,9 @@ final class LocalTerminalViewModel {
         statusFilePath = path
         let src = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd,
-            eventMask: [.write, .extend, .delete, .rename],
+            // .attrib catches the `touch` nudges that subagent-start/-stop
+            // emit (they don't change the file content, only mtime).
+            eventMask: [.write, .extend, .delete, .rename, .attrib],
             queue: .main
         )
         src.setEventHandler { [weak self] in
@@ -282,7 +315,12 @@ final class LocalTerminalViewModel {
     }
 
     private func checkHeartbeat() {
-        guard isActive, !awaitingInput,
+        // Skip while compacting: PreCompact deliberately starves the PTY for
+        // a while, and the orange "compacting" dot already explains the
+        // silence — falsely promoting to green here would override it (per
+        // the status-priority order in ClaudeSessionRow, `awaitingInput`
+        // beats `isCompacting`).
+        guard isActive, !awaitingInput, !isCompacting,
               let last = lastDataReceivedAt,
               Date().timeIntervalSince(last) >= Self.heartbeatIdleThreshold
         else { return }
@@ -290,6 +328,10 @@ final class LocalTerminalViewModel {
     }
 
     private func readStatusFile() {
+        // Subagent count is independent of the state-name pipeline — refresh
+        // it on every watcher tick (the hook touches the state file after
+        // mutating the subagent dir to guarantee a tick fires).
+        refreshSubagentCount()
         guard let path = statusFilePath,
               let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
               let raw = String(data: data, encoding: .utf8) else { return }
@@ -298,15 +340,31 @@ final class LocalTerminalViewModel {
         applyHookState(state)
     }
 
+    private func refreshSubagentCount() {
+        guard let dir = subagentDirPath else { return }
+        let count = (try? FileManager.default.contentsOfDirectory(atPath: dir).count) ?? 0
+        if activeSubagents != count {
+            activeSubagents = count
+        }
+    }
+
     private func applyHookState(_ hookState: String) {
         let wasActive = isActive
         switch hookState {
         case "working":
             isActive = true
             awaitingInput = false
+            awaitingPermission = false
+            isCompacting = false
+            // PreToolUse / PostToolUse fire `working` around every tool call.
+            // Treat each write as a liveness signal so the heartbeat doesn't
+            // promote a long Bash / MCP call to awaitingInput.
+            lastDataReceivedAt = Date()
         case "idle":
             isActive = false
             awaitingInput = false
+            awaitingPermission = false
+            isCompacting = false
             if wasActive { didFinish = true }
         case "awaiting-input":
             // Claude is still mid-turn, just blocked on user input — keep
@@ -314,6 +372,20 @@ final class LocalTerminalViewModel {
             // flowing, `noteDataReceived` can clear `awaitingInput` (it gates
             // the demotion on `isActive` so unrelated stray bytes don't trip it).
             awaitingInput = true
+        case "awaiting-permission":
+            // PermissionRequest hook — more specific than awaiting-input.
+            // Both flags may be set if Notification also fires; UI prioritises
+            // permission, and they all clear together on the next "working".
+            awaitingPermission = true
+        case "compacting":
+            // PreCompact: Claude isn't idle but isn't producing output
+            // either. `checkHeartbeat` skips while `isCompacting` is true,
+            // so we don't falsely promote to `awaitingInput` during the
+            // PTY-silence stretch. Still refresh `lastDataReceivedAt` so
+            // that PostCompact → "working" doesn't immediately trip the
+            // 6s threshold on its first heartbeat tick.
+            isCompacting = true
+            lastDataReceivedAt = Date()
         default:
             break
         }
