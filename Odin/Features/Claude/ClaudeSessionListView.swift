@@ -8,7 +8,7 @@ struct ClaudeSessionListView: View {
     var body: some View {
         HSplitView {
             sidebar
-                .frame(minWidth: 180, idealWidth: 220, maxWidth: 360)
+                .frame(minWidth: 160, idealWidth: 180, maxWidth: 360)
             detail
                 .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -49,6 +49,7 @@ struct ClaudeSessionListView: View {
     private var shortcutHints: some View {
         VStack(alignment: .leading, spacing: 4) {
             shortcutRow(label: "New session", shortcut: "⌘N")
+            shortcutRow(label: "Project pane", shortcut: "⇧⌘P")
             shortcutRow(label: "Diff pane", shortcut: "⇧⌘D")
             shortcutRow(label: "Review pane", shortcut: "⇧⌘R")
             shortcutRow(label: "Terminal pane", shortcut: "⇧⌘T")
