@@ -56,7 +56,7 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else if !SSHKeyManager.hasKey() {
-                    Text("Generate an SSH key in the Terminal tab first.")
+                    Text("Generate an SSH key in the Remote tab first.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

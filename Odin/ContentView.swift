@@ -4,7 +4,7 @@ enum AppTab: Hashable {
     #if os(macOS)
     case claude
     #endif
-    case terminal, notes, todos
+    case remote, notes, todos
 }
 
 struct ContentView: View {
@@ -26,7 +26,7 @@ struct ContentView: View {
             ZStack {
                 switch selectedTab {
                 case .claude:   ClaudeSessionListView()
-                case .terminal: TerminalContainerView(selectedTab: $selectedTab)
+                case .remote:   TerminalContainerView(selectedTab: $selectedTab)
                 case .notes:    NoteListView()
                 case .todos:    TodoListView()
                 }
@@ -38,7 +38,7 @@ struct ContentView: View {
     @ViewBuilder
     private var iosBody: some View {
         TabView(selection: $selectedTab) {
-            Tab("Terminal", systemImage: "terminal", value: AppTab.terminal) {
+            Tab("Remote", systemImage: "terminal", value: AppTab.remote) {
                 TerminalContainerView(selectedTab: $selectedTab)
             }
             Tab("Notes", systemImage: "note.text", value: AppTab.notes) {
@@ -62,7 +62,7 @@ private struct MacTabItemData: Identifiable {
 
 private let macTabItems: [MacTabItemData] = [
     .init(id: .claude,   label: "Claude",   icon: "brain",     shortcut: "⌃1"),
-    .init(id: .terminal, label: "Terminal", icon: "terminal.fill", shortcut: "⌃2"),
+    .init(id: .remote,   label: "Remote",   icon: "terminal.fill", shortcut: "⌃2"),
     .init(id: .notes,    label: "Notes",    icon: "note.text", shortcut: "⌃3"),
     .init(id: .todos,    label: "Todos",    icon: "checklist", shortcut: "⌃4"),
 ]
