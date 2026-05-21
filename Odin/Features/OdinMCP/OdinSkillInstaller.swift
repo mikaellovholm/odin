@@ -47,11 +47,12 @@ enum OdinSkillInstaller {
 
     # Spawn a background Claude worker — fire and forget
 
-    The Odin MCP exposes three tools backed by Odin's in-process server:
+    The Odin MCP exposes these tools backed by Odin's in-process server:
 
     - `mcp__odin__run_background_task(prompt, cwd?, model?)` — **returns immediately** with `{task_id, status: "running"}`. The worker keeps running. Pass `model` (e.g. `"claude-sonnet-4-6"`, `"claude-opus-4-7"`, `"claude-haiku-4-5"`) to pin a specific model; omit to use the host CLI default.
     - `mcp__odin__get_task_status(task_id)` — non-blocking snapshot. Call this when you want to peek.
     - `mcp__odin__await_task(task_id, timeout_seconds?)` — blocks the parent tool call until the worker exits. **Avoid unless you really need the answer in the same assistant turn.** Blocking here means you've turned a "background task" into a synchronous wait.
+    - `mcp__odin__stop_task(task_id)` — send SIGTERM to a single worker. Use when the user asks to cancel a specific task. Returns immediately; the worker may take a moment to actually exit. Final state surfaces as `failed` with `"cancelled by user"`.
 
     Each call to `run_background_task` spawns a fresh `claude -p` subprocess with `--dangerously-skip-permissions`. It has no UI and lives only inside Odin.
 
@@ -247,6 +248,10 @@ enum OdinSkillInstaller {
     The panel shows findings live. You usually shouldn't talk about them at all. But if the user asks a specific question — *"explain the security blocker"*, *"what did the style reviewer find"*, *"is the api-compat one fixable"* — call `mcp__odin__get_review_run` (no args; it uses your tab's `X-Session-Id` to find the latest run). The response carries every concern's status, every finding (id, file, line, severity, concern, title, detail, suggestion, fixable, fix_state), and every fix worker's outcome. Answer the user's question from that data; don't dump the whole JSON back at them.
 
     Do NOT call `get_review_run` proactively after dispatch — the panel is the surface and the user is already looking at it. Only fetch when the user asks something you can't answer without it.
+
+    ## Cancelling a review
+
+    If the user asks to stop the background review ("cancel", "stop the review", "kill the workers"), call `mcp__odin__stop_review_run` with no arguments — it defaults to the latest run for this tab and signals every in-flight reviewer and fix worker. Report the `stopped_count` back to the user. Cancelled workers surface in the panel as failed with "cancelled by user".
 
     ## Fixes are panel-driven
 
