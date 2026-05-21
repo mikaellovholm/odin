@@ -98,3 +98,29 @@ struct ThemedContainer<Content: View>: View {
             .preferredColorScheme(appearance.colorScheme)
     }
 }
+
+#if os(macOS)
+/// Reaches up to the hosting `NSWindow` and forces it opaque. SwiftUI defaults
+/// can leave the window translucent on macOS — once any descendant view uses
+/// a vibrant material (`.bar`, `.regularMaterial`, `List(.sidebar)`'s
+/// implicit `NSVisualEffectView`), that material can punch through the
+/// window's contentView and reveal whatever is behind the app. Setting
+/// `isOpaque = true` plus a solid `backgroundColor` shuts that down for the
+/// entire window. Sized as a zero-frame, hit-test-disabled background so it
+/// doesn't affect layout.
+struct OpaqueWindowAccessor: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        // The view's window isn't available immediately on creation; defer
+        // one runloop tick to make sure the window has been hooked up.
+        DispatchQueue.main.async { [weak view] in
+            guard let window = view?.window else { return }
+            window.isOpaque = true
+            window.backgroundColor = NSColor.windowBackgroundColor
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+#endif
