@@ -43,6 +43,11 @@ struct OdinApp: App {
                 #if os(macOS)
                     .environment(claudeSessionStore)
                     .task { claudeSessionStore.loadPersisted() }
+                    // Force the NSWindow opaque — without this, the system
+                    // window can pick up translucency from materials inside
+                    // it (e.g. `.listStyle(.sidebar)`'s vibrant background)
+                    // and show whatever is behind the app through the panel.
+                    .background(OpaqueWindowAccessor())
                 #endif
             }
         }
