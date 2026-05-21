@@ -52,16 +52,16 @@ struct OdinApp: App {
             CommandGroup(replacing: .newItem) {
                 /// ⌘N is context-sensitive: the title and effect track
                 /// `selectedTab` so a single shortcut creates a new item in
-                /// whichever pane is showing. Disabled on Terminal (no
+                /// whichever pane is showing. Disabled on Remote (no
                 /// "new" concept there).
                 Button(newItemTitle) { performNewItem() }
                     .keyboardShortcut("n", modifiers: [.command])
-                    .disabled(selectedTab == .terminal)
+                    .disabled(selectedTab == .remote)
             }
             CommandMenu("Go") {
                 Button("Claude") { selectedTab = .claude }
                     .keyboardShortcut("1", modifiers: .control)
-                Button("Terminal") { selectedTab = .terminal }
+                Button("Remote") { selectedTab = .remote }
                     .keyboardShortcut("2", modifiers: .control)
                 Button("Notes") { selectedTab = .notes }
                     .keyboardShortcut("3", modifiers: .control)
@@ -86,7 +86,7 @@ struct OdinApp: App {
         case .claude:   return "New Claude Session"
         case .notes:    return "New Note"
         case .todos:    return "New Todo"
-        case .terminal: return "New"
+        case .remote:   return "New"
         }
     }
 
@@ -98,7 +98,7 @@ struct OdinApp: App {
             NotificationCenter.default.post(name: .odinCreateNewNote, object: nil)
         case .todos:
             NotificationCenter.default.post(name: .odinCreateNewTodo, object: nil)
-        case .terminal:
+        case .remote:
             break
         }
     }

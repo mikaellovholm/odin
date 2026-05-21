@@ -72,7 +72,7 @@ enum VMStarterService {
             case .timeout:
                 return "VM did not become ready within 60 seconds"
             case .missingAPIKey:
-                return "API key not configured. Set it in Terminal settings."
+                return "API key not configured. Set it in Remote settings."
             case .missingHostKey:
                 return "VM did not return SSH host key"
             case .rateLimited(let retryAfter):
