@@ -27,11 +27,12 @@ struct DiffPaneView: View {
                     subtitle: nil
                 )
             } else {
-                VSplitView {
+                VStack(spacing: 0) {
                     fileList
-                        .frame(minHeight: 80, idealHeight: 180)
+                        .frame(height: fileListHeight)
+                    Divider()
                     diffArea
-                        .frame(minHeight: 120, maxHeight: .infinity)
+                        .frame(maxHeight: .infinity)
                 }
             }
         }
@@ -101,6 +102,15 @@ struct DiffPaneView: View {
         DispatchQueue.main.async {
             fileListFocused = true
         }
+    }
+
+    /// Caps the file list at 6.5 rows so the diff body always gets the lion's
+    /// share of the pane. The half row hints there's more to scroll to.
+    private var fileListHeight: CGFloat {
+        let rowHeight: CGFloat = 36
+        let maxRows: CGFloat = 6.5
+        let visible = min(CGFloat(viewModel.files.count), maxRows)
+        return visible * rowHeight
     }
 
     @ViewBuilder
