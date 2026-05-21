@@ -5,14 +5,13 @@ struct ClaudeSessionDetailView: View {
     let session: ClaudeSession
     @State private var keyboardDismissed = false
     @AppStorage(TerminalFontSettings.key) private var fontSize: Double = Double(TerminalFontSettings.defaultSize)
-    @AppStorage("claude.shellPaneVisible") private var shellPaneVisible: Bool = false
 
     private var viewModel: LocalTerminalViewModel { session.viewModel }
 
     var body: some View {
         composedBody
             .background(paneShortcuts)
-            .onChange(of: shellPaneVisible) { _, newValue in
+            .onChange(of: session.shellPaneVisible) { _, newValue in
                 if newValue { focusShell() }
             }
     }
@@ -24,7 +23,7 @@ struct ClaudeSessionDetailView: View {
         ZStack {
             Button("") { session.projectPanelVisible.toggle() }
                 .keyboardShortcut("p", modifiers: [.command, .shift])
-            Button("") { shellPaneVisible.toggle() }
+            Button("") { session.shellPaneVisible.toggle() }
                 .keyboardShortcut("t", modifiers: [.command, .shift])
             Button("") {
                 session.rightPaneMode = (session.rightPaneMode == .diff) ? .hidden : .diff
@@ -99,7 +98,7 @@ struct ClaudeSessionDetailView: View {
 
     @ViewBuilder
     private var leftColumn: some View {
-        if shellPaneVisible {
+        if session.shellPaneVisible {
             VSplitView {
                 terminalArea
                     .frame(minHeight: 200, maxHeight: .infinity)
@@ -119,7 +118,9 @@ struct ClaudeSessionDetailView: View {
                 onSizeChanged: { session.shellViewModel.resizeTerminal(cols: $0, rows: $1) },
                 fontSize: CGFloat(fontSize),
                 isConnected: session.shellViewModel.state == .running,
-                keyboardDismissed: $keyboardDismissed
+                keyboardDismissed: $keyboardDismissed,
+                useHomebrewTheme: true,
+                backgroundColorOverride: TerminalTheme.shellBackground
             )
             .opacity(session.shellViewModel.state == .running ? 1 : 0)
 
@@ -132,7 +133,10 @@ struct ClaudeSessionDetailView: View {
                 }
             }
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        // Matches the SwiftTerm canvas inside so any startup gap / exited
+        // overlay reads as the same surface, not pure black against the
+        // Claude session's pure-black canvas above.
+        .background(Color(nsColor: TerminalTheme.shellBackground))
         .onAppear {
             session.shellViewModel.startIfNeeded()
             focusShell()

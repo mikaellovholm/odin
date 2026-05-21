@@ -1,5 +1,6 @@
 #if os(macOS)
 import SwiftUI
+import MarkdownUI
 
 /// Read-only viewer for the file currently selected in the project panel.
 /// Renders line numbers + Highlightr-syntax-highlighted text. Binary files
@@ -21,8 +22,13 @@ struct FileViewerView: View {
     /// because the view model may load a fresh file at the same URL after a
     /// refresh; pointer identity isn't available for Swift strings.
     @State private var cachedLinesKey: String?
+    /// True when the user has toggled the markdown preview on. Persists across
+    /// file switches inside a single viewer mount — opening another `.md` file
+    /// stays in preview mode, opening a non-md file just hides the toggle.
+    @State private var showPreview: Bool = false
 
     private var isDark: Bool { colorScheme == .dark }
+    private var isMarkdown: Bool { viewModel.selectedFileLanguage == "markdown" }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -104,15 +110,19 @@ struct FileViewerView: View {
                 .lineLimit(1)
                 .truncationMode(.head)
             Spacer()
-            Text("esc")
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1)
-                .background(
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(Color.primary.opacity(0.08))
-                )
+            if isMarkdown && !viewModel.selectedFileIsBinary {
+                ShortcutKey("⇧⌘M")
+                Button {
+                    showPreview.toggle()
+                } label: {
+                    Image(systemName: showPreview ? "chevron.left.forwardslash.chevron.right" : "eye")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                .buttonStyle(.borderless)
+                .help(showPreview ? "Show source (⇧⌘M)" : "Show preview (⇧⌘M)")
+                .keyboardShortcut("m", modifiers: [.shift, .command])
+            }
+            ShortcutKey("esc")
             Button {
                 viewModel.clearSelection()
                 viewModel.requestFocus(.tree)
@@ -135,7 +145,10 @@ struct FileViewerView: View {
         } else if viewModel.selectedFileIsBinary {
             placeholder(icon: "doc", title: "Binary file — preview not available", progress: false)
         } else if let text = viewModel.selectedFileContent {
-            body(text: text)
+            if isMarkdown && showPreview {
+                markdownPreview(text: text)
+            } else {
+                body(text: text)
                 // Recompute the line split only when the file content actually
                 // changes — without this, every arrow keypress would re-split
                 // a potentially-huge file as a side-effect of body re-eval.
@@ -151,8 +164,28 @@ struct FileViewerView: View {
                     refreshCachedLines(text: newText ?? "")
                     applyPendingFocusLineIfReady(viewModel.pendingFocusLine)
                 }
+            }
         } else {
             placeholder(icon: "exclamationmark.triangle", title: "Couldn't read file", progress: false)
+        }
+    }
+
+    private func markdownPreview(text: String) -> some View {
+        ScrollView(.vertical) {
+            if text.isEmpty {
+                Text("Empty file")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            } else {
+                Markdown(text)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+            }
+            if viewModel.selectedFileTruncated {
+                truncationFooter
+            }
         }
     }
 
@@ -202,6 +235,16 @@ struct FileViewerView: View {
                 // editors do — the cursor isn't pinned to an edge, so a
                 // single keypress doesn't trigger a big jump.
                 proxy.scrollTo(new, anchor: .center)
+            }
+            // When this source view re-mounts after a markdown-preview toggle,
+            // the ScrollView is fresh and starts at the top — even though
+            // `focusedLine` survives on the parent. Restore the cursor's spot.
+            // Skip line 0 so the first-mount of a new file isn't oddly
+            // centered (the natural top-aligned scroll handles that).
+            .onAppear {
+                if focusedLine > 0 {
+                    proxy.scrollTo(focusedLine, anchor: .center)
+                }
             }
         }
     }

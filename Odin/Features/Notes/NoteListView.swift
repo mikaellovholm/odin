@@ -6,6 +6,11 @@ struct NoteListView: View {
     @Query(sort: \Note.updatedAt, order: .reverse) private var notes: [Note]
     @State private var searchText = ""
     @State private var selectedNote: Note?
+    /// Persist the last-opened note id so tab switches don't lose the user's
+    /// editing context. The mac layout tears down `NoteListView` on every
+    /// `selectedTab` change (see `ContentView.macBody`), which resets
+    /// `selectedNote`; this re-hydrates it from disk on the next appearance.
+    @AppStorage("notes.lastSelectedNoteID") private var lastSelectedNoteIDRaw: String = ""
 
     private var filteredNotes: [Note] {
         guard !searchText.isEmpty else { return Array(notes) }
@@ -35,11 +40,30 @@ struct NoteListView: View {
     }
 
     var body: some View {
-        #if os(macOS)
-        macBody
-        #else
-        iosBody
-        #endif
+        Group {
+            #if os(macOS)
+            macBody
+            #else
+            iosBody
+            #endif
+        }
+        .onAppear(perform: restoreSelectionIfNeeded)
+        .onChange(of: selectedNote) { _, new in
+            lastSelectedNoteIDRaw = new?.id.uuidString ?? ""
+        }
+    }
+
+    /// Re-hydrate `selectedNote` from `lastSelectedNoteIDRaw`. No-op if a note
+    /// is already selected (e.g. user opened the tab, selected a note, came
+    /// back — don't overwrite their choice with the persisted id) or if the
+    /// persisted note has since been deleted.
+    private func restoreSelectionIfNeeded() {
+        guard selectedNote == nil,
+              !lastSelectedNoteIDRaw.isEmpty,
+              let uuid = UUID(uuidString: lastSelectedNoteIDRaw),
+              let note = notes.first(where: { $0.id == uuid })
+        else { return }
+        selectedNote = note
     }
 
     // MARK: - macOS
@@ -76,6 +100,10 @@ struct NoteListView: View {
             shortcutHints
         }
         .frame(maxHeight: .infinity, alignment: .top)
+        // Opaque window background — matches the Claude sessions sidebar.
+        // A translucent material would let content behind the window bleed
+        // through the header / search / shortcut-hints regions.
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private var header: some View {
@@ -149,6 +177,11 @@ struct NoteListView: View {
             }
         }
         .listStyle(.sidebar)
+        // Hide the sidebar style's vibrant NSVisualEffectView so it doesn't
+        // leak whatever's behind the app. Window color matches the parent
+        // VStack's background.
+        .scrollContentBackground(.hidden)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private var emptySidebar: some View {
@@ -334,7 +367,7 @@ private struct NoteRow: View {
                         .lineLimit(2)
                 }
 
-                Text(note.updatedAt, style: .relative)
+                Text(Self.formatUpdatedAt(note.updatedAt))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
@@ -380,4 +413,16 @@ private struct NoteRow: View {
         .help("Delete note")
     }
     #endif
+
+    /// Today → time of day, this year → "MMM d", older → "MMM d, yyyy".
+    static func formatUpdatedAt(_ date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) {
+            return date.formatted(date: .omitted, time: .shortened)
+        }
+        if calendar.isDate(date, equalTo: .now, toGranularity: .year) {
+            return date.formatted(.dateTime.month(.abbreviated).day())
+        }
+        return date.formatted(date: .abbreviated, time: .omitted)
+    }
 }

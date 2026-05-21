@@ -10,13 +10,23 @@ struct TerminalRepresentable: UIViewRepresentable {
     var fontSize: CGFloat = 10
     var isConnected: Bool
     @Binding var keyboardDismissed: Bool
+    /// Opt-in `Homebrew` Terminal.app profile (phosphor-green text + caret).
+    /// Default is `false` so existing call sites keep their white-on-black look.
+    var useHomebrewTheme: Bool = false
+    /// Override the terminal's canvas background. Defaults to black; set to
+    /// e.g. `TerminalTheme.shellBackground` for the shell pane.
+    var backgroundColorOverride: UIColor? = nil
 
     func makeUIView(context: Context) -> OdinTerminalView {
         let tv = OdinTerminalView(frame: .zero)
         tv.terminalDelegate = context.coordinator
-        tv.nativeBackgroundColor = .black
-        tv.nativeForegroundColor = .white
-        tv.backgroundColor = .black
+        let bg = backgroundColorOverride ?? .black
+        tv.nativeBackgroundColor = bg
+        tv.nativeForegroundColor = useHomebrewTheme ? TerminalTheme.homebrewForeground : .white
+        if useHomebrewTheme {
+            tv.caretColor = TerminalTheme.homebrewForeground
+        }
+        tv.backgroundColor = bg
         tv.isOpaque = true
         tv.font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         tv.onTapped = { keyboardDismissed = false }
@@ -172,12 +182,21 @@ struct TerminalRepresentable: NSViewRepresentable {
     var fontSize: CGFloat = 12
     var isConnected: Bool
     @Binding var keyboardDismissed: Bool
+    /// Opt-in `Homebrew` Terminal.app profile (phosphor-green text + caret).
+    /// Default is `false` so existing call sites keep their white-on-black look.
+    var useHomebrewTheme: Bool = false
+    /// Override the terminal's canvas background. Defaults to black; set to
+    /// e.g. `TerminalTheme.shellBackground` for the shell pane.
+    var backgroundColorOverride: NSColor? = nil
 
     func makeNSView(context: Context) -> TerminalView {
         let tv = TerminalView(frame: .zero)
         tv.terminalDelegate = context.coordinator
-        tv.nativeBackgroundColor = .black
-        tv.nativeForegroundColor = .white
+        tv.nativeBackgroundColor = backgroundColorOverride ?? .black
+        tv.nativeForegroundColor = useHomebrewTheme ? TerminalTheme.homebrewForeground : .white
+        if useHomebrewTheme {
+            tv.caretColor = TerminalTheme.homebrewForeground
+        }
         if let monoFont = NSFont(name: "Menlo", size: fontSize)
             ?? NSFont.userFixedPitchFont(ofSize: fontSize) {
             tv.font = monoFont
@@ -240,4 +259,18 @@ extension TerminalRepresentable {
         func iTermContent(source: TerminalView, content: ArraySlice<UInt8>) {}
         func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
     }
+}
+
+/// Shared color constants for terminal panes.
+enum TerminalTheme {
+    #if os(macOS)
+    /// Bright phosphor green — macOS Terminal.app "Homebrew" profile foreground.
+    static let homebrewForeground = NSColor(red: 40/255, green: 254/255, blue: 20/255, alpha: 1)
+    /// Slightly-lifted dark grey for the shell pane so it reads as a distinct
+    /// sub-pane under the (pure black) Claude session terminal.
+    static let shellBackground = NSColor(red: 0x1E/255, green: 0x1E/255, blue: 0x1E/255, alpha: 1)
+    #else
+    static let homebrewForeground = UIColor(red: 40/255, green: 254/255, blue: 20/255, alpha: 1)
+    static let shellBackground = UIColor(red: 0x1E/255, green: 0x1E/255, blue: 0x1E/255, alpha: 1)
+    #endif
 }

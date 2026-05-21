@@ -44,6 +44,11 @@ struct ClaudeSessionListView: View {
             shortcutHints
         }
         .frame(maxHeight: .infinity, alignment: .top)
+        // Opaque window background — `.regularMaterial` is translucent, so
+        // anything behind the app (other windows, desktop) bleeds through the
+        // header and shortcut-hints regions. `windowBackgroundColor` matches
+        // the rest of the macOS chrome and is fully opaque.
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private var shortcutHints: some View {
@@ -123,6 +128,11 @@ struct ClaudeSessionListView: View {
             }
         }
         .listStyle(.sidebar)
+        // `.sidebar` paints its own translucent NSVisualEffectView on the
+        // list's scroll content, sitting above the parent's opaque fill.
+        // Hide it and reapply the window color so the list is opaque too.
+        .scrollContentBackground(.hidden)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private var emptySidebar: some View {

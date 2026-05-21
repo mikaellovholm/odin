@@ -67,6 +67,40 @@ enum OdinMCPTools {
             ]
         ],
         [
+            "name": "stop_task",
+            "description": """
+            Send SIGTERM to a single background task. Returns immediately — the worker may take \
+            a moment to actually exit. Use when the user asks to cancel a specific task by id. \
+            For stopping an entire review run (all reviewer + fix workers), prefer stop_review_run.
+            """,
+            "inputSchema": [
+                "type": "object",
+                "properties": [
+                    "task_id": ["type": "string", "description": "The id returned by run_background_task."]
+                ],
+                "required": ["task_id"]
+            ]
+        ],
+        [
+            "name": "stop_review_run",
+            "description": """
+            Stop every in-flight worker (Phase-1 reviewers and Phase-2 fixers) in a review run. \
+            Use when the user asks to cancel the review. With no review_id, defaults to the \
+            latest review run for the calling Odin tab (X-Session-Id header). Returns the list \
+            of task ids that were signalled.
+            """,
+            "inputSchema": [
+                "type": "object",
+                "properties": [
+                    "review_id": [
+                        "type": "string",
+                        "description": "Optional. Id returned by start_review_run. Omit to stop the latest run for this tab."
+                    ]
+                ],
+                "required": []
+            ]
+        ],
+        [
             "name": "start_review_run",
             "description": """
             Start a structured review run owned by Odin. Returns a review_id you then pass to \
@@ -198,6 +232,10 @@ enum OdinMCPTools {
             return try getTaskStatus(args)
         case "await_task":
             return try await awaitTask(args)
+        case "stop_task":
+            return try stopTask(args)
+        case "stop_review_run":
+            return try stopReviewRun(args)
         case "start_review_run":
             return try startReviewRun(args)
         case "submit_finding":
@@ -550,6 +588,74 @@ enum OdinMCPTools {
             dict["timed_out"] = true
         }
         return jsonString(dict)
+    }
+
+    @MainActor
+    private static func stopTask(_ args: [String: Any]) throws -> String {
+        guard let id = args["task_id"] as? String, !id.isEmpty else {
+            throw OdinMCPError.invalidArgument("task_id is required")
+        }
+        guard let runner = BackgroundTaskRegistry.shared.get(id) else {
+            throw OdinMCPError.taskNotFound(id)
+        }
+        let signalled = runner.cancel()
+        var dict = stateDict(runner: runner)
+        dict["signalled"] = signalled
+        if !signalled {
+            // Either already finished or never had a live process. Surface
+            // *why* so the caller doesn't retry on a terminal task.
+            dict["reason"] = (runner.state == .running)
+                ? "no live process"
+                : "task already finished"
+        }
+        return jsonString(dict)
+    }
+
+    @MainActor
+    private static func stopReviewRun(_ args: [String: Any]) throws -> String {
+        let explicitId = (args["review_id"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        let run: ReviewRun?
+        if let explicitId {
+            run = ReviewRunRegistry.shared.get(explicitId)
+        } else if let sid = CurrentMCPRequest.sessionId, !sid.isEmpty {
+            run = ReviewRunRegistry.shared.latestRun(forSessionId: sid)
+        } else {
+            run = nil
+        }
+        guard let run else {
+            throw OdinMCPError.invalidArgument(
+                explicitId == nil
+                    ? "no review run found for this session"
+                    : "review run not found: \(explicitId ?? "")"
+            )
+        }
+        // Match by reviewContext.reviewId so we catch both Phase-1 reviewers
+        // and Phase-2 fix workers — both carry the run id via reviewContext.
+        let runners = BackgroundTaskRegistry.shared.all().filter { runner in
+            guard runner.state == .running else { return false }
+            return runner.reviewContext?.reviewId == run.id
+        }
+        var stopped: [[String: Any]] = []
+        for runner in runners {
+            let signalled = runner.cancel()
+            var entry: [String: Any] = [
+                "task_id": runner.id,
+                "signalled": signalled
+            ]
+            if case .reviewer(let concern) = runner.reviewContext?.role {
+                entry["concern"] = concern
+                entry["role"] = "reviewer"
+            } else if case .fixer(let file) = runner.reviewContext?.role {
+                entry["file"] = file
+                entry["role"] = "fixer"
+            }
+            stopped.append(entry)
+        }
+        return jsonString([
+            "review_id": run.id,
+            "stopped_count": stopped.count,
+            "stopped": stopped
+        ])
     }
 
     @MainActor

@@ -87,7 +87,10 @@ private struct MacTabBar: View {
         }
         .padding(.top, 10)
         .frame(maxWidth: .infinity, alignment: .center)
-        .background(.bar)
+        // `.bar` is a vibrant material — translucent — so anything behind the
+        // window bleeds through the tab strip. Opaque window background to
+        // match the rest of the chrome.
+        .background(Color(nsColor: .windowBackgroundColor))
         .overlay(alignment: .bottom) {
             Divider().opacity(0.6)
         }
