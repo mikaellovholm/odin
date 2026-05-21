@@ -46,6 +46,9 @@ final class BackgroundClaudeRunner {
     var onFinish: ((State) -> Void)?
 
     private(set) var state: State = .running
+    /// Set the moment `cancel()` is called. `finish` reads this so the final
+    /// state reads as "cancelled by user" instead of a bare exit-code message.
+    private(set) var wasCancelled: Bool = false
     @ObservationIgnored private var process: Process?
     @ObservationIgnored private var stdoutBuffer = Data()
     @ObservationIgnored private var stderrBuffer = Data()
@@ -156,6 +159,8 @@ final class BackgroundClaudeRunner {
         let trimmed = stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
         if exitCode == 0 {
             state = .completed(trimmed)
+        } else if wasCancelled {
+            state = .failed("cancelled by user")
         } else {
             let stderrTail = String(stderrText.suffix(2000))
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -179,13 +184,15 @@ final class BackgroundClaudeRunner {
         let success = exitCode == 0
         let message: String? = success
             ? nil
-            : {
-                let tail = String(stderrTail.suffix(500))
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                return tail.isEmpty
-                    ? "worker exited with code \(exitCode)"
-                    : "worker exited with code \(exitCode): \(tail)"
-            }()
+            : wasCancelled
+                ? "cancelled by user"
+                : {
+                    let tail = String(stderrTail.suffix(500))
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    return tail.isEmpty
+                        ? "worker exited with code \(exitCode)"
+                        : "worker exited with code \(exitCode): \(tail)"
+                }()
         switch ctx.role {
         case .reviewer(let concern):
             ReviewRunRegistry.shared.autoResolveReviewerOnExit(
@@ -349,8 +356,17 @@ final class BackgroundClaudeRunner {
         return state
     }
 
-    func cancel() {
-        process?.terminate()
+    /// Send SIGTERM to the worker process. Idempotent — calling on a
+    /// terminal-state runner is a no-op. The actual transition to `.failed`
+    /// happens asynchronously via the existing terminationHandler; callers
+    /// who need the final state should `awaitCompletion` or poll.
+    /// Returns true if a process was actually signalled.
+    @discardableResult
+    func cancel() -> Bool {
+        guard state == .running, let p = process, p.isRunning else { return false }
+        wasCancelled = true
+        p.terminate()
+        return true
     }
 }
 #endif
