@@ -73,7 +73,7 @@ struct UnifiedDiffView: View {
         // Track per-side line numbers across this hunk so the gutter
         // matches what GitHub / VS Code show.
         let numbered = numberLines(hunk: hunk)
-        ForEach(Array(numbered.enumerated()), id: \.offset) { _, entry in
+        ForEach(numbered) { entry in
             DiffLineRow(
                 line: entry.line,
                 oldNumber: entry.oldNumber,
@@ -105,7 +105,8 @@ struct UnifiedDiffView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private struct NumberedLine {
+    private struct NumberedLine: Identifiable {
+        let id: String
         let line: DiffLine
         let oldNumber: Int?
         let newNumber: Int?
@@ -116,20 +117,21 @@ struct UnifiedDiffView: View {
         out.reserveCapacity(hunk.lines.count)
         var oldNum = hunk.oldStart
         var newNum = hunk.newStart
-        for line in hunk.lines {
+        for (idx, line) in hunk.lines.enumerated() {
+            let id = "\(hunk.id)-\(idx)"
             switch line {
             case .context:
-                out.append(NumberedLine(line: line, oldNumber: oldNum, newNumber: newNum))
+                out.append(NumberedLine(id: id, line: line, oldNumber: oldNum, newNumber: newNum))
                 oldNum += 1
                 newNum += 1
             case .addition:
-                out.append(NumberedLine(line: line, oldNumber: nil, newNumber: newNum))
+                out.append(NumberedLine(id: id, line: line, oldNumber: nil, newNumber: newNum))
                 newNum += 1
             case .deletion:
-                out.append(NumberedLine(line: line, oldNumber: oldNum, newNumber: nil))
+                out.append(NumberedLine(id: id, line: line, oldNumber: oldNum, newNumber: nil))
                 oldNum += 1
             case .hunkHeader, .noNewline:
-                out.append(NumberedLine(line: line, oldNumber: nil, newNumber: nil))
+                out.append(NumberedLine(id: id, line: line, oldNumber: nil, newNumber: nil))
             }
         }
         return out
