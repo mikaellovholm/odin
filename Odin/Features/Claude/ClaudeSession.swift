@@ -31,6 +31,10 @@ final class ClaudeSession: Identifiable {
     /// new sessions always start hidden and one tab's pane choice doesn't
     /// follow you into another.
     var rightPaneMode: RightPaneMode = .hidden
+    /// Per-session visibility of the bottom shell pane (⇧⌘T). Matches the
+    /// per-session pattern of `projectPanelVisible` / `rightPaneMode` so
+    /// toggling on one session doesn't flip the others.
+    var shellPaneVisible: Bool = false
 
     init(workingDirectory: String, id: UUID = UUID()) {
         self.id = id
