@@ -148,7 +148,8 @@ enum OdinHookInstaller {
             ("Stop", "\(statusScriptPath) idle"),
             ("Notification", "\(statusScriptPath) awaiting-input"),
             // Dedicated permission-prompt signal, distinct from generic
-            // awaiting-input. Drives the cyan urgent-attention dot.
+            // awaiting-input. Outranks awaiting-input and shares the green
+            // "needs attention" dot (unified in commit 4a8cd32).
             ("PermissionRequest", "\(statusScriptPath) awaiting-permission"),
             // Context compaction: Claude is neither idle nor working in the
             // normal sense — show a distinct compacting indicator.

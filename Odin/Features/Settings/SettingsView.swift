@@ -13,11 +13,15 @@ struct SettingsView: View {
     @State private var biometricError: String?
     @State private var diagnostics = OdinDiagnostics.shared
 
-    // API key replace flow — empty means "show as configured"; non-empty
-    // means the user is currently entering a replacement.
+    // API key replace flow. `apiKeyConfigured` reflects what's in the
+    // Keychain; `apiKeyReplacing` is true while the user is entering a
+    // replacement. We can't drive the entry UI off `apiKeyInput.isEmpty`
+    // alone — clicking Replace and then deleting all input would silently
+    // bounce back to the "Saved" branch — so the flag stays separate.
     @State private var apiKeyInput: String = ""
     @State private var apiKeySaveError: String?
     @State private var apiKeyConfigured = APIKeyManager.get() != nil
+    @State private var apiKeyReplacing: Bool = false
 
     // SSH public key — fetched lazily on appear; nil if no key is stored.
     @State private var publicKey: String?
@@ -122,7 +126,7 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var apiKeySection: some View {
-        if apiKeyConfigured && apiKeyInput.isEmpty {
+        if apiKeyConfigured && !apiKeyReplacing {
             HStack {
                 Text("Cloud Function API key")
                 Spacer()
@@ -131,7 +135,7 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.green)
                 Button("Replace…") {
-                    apiKeyInput = " "  // arm the field so the entry UI shows
+                    apiKeyReplacing = true
                     apiKeyInput = ""
                     apiKeySaveError = nil
                 }
@@ -157,6 +161,7 @@ struct SettingsView: View {
                         Button("Cancel") {
                             apiKeyInput = ""
                             apiKeySaveError = nil
+                            apiKeyReplacing = false
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
@@ -180,6 +185,7 @@ struct SettingsView: View {
             apiKeyInput = ""
             apiKeySaveError = nil
             apiKeyConfigured = true
+            apiKeyReplacing = false
         } catch {
             apiKeySaveError = error.localizedDescription
         }

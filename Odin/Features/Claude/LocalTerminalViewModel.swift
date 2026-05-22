@@ -39,7 +39,8 @@ final class LocalTerminalViewModel {
     var awaitingInput: Bool = false
     /// Claude raised a permission/approval prompt (`PermissionRequest` hook
     /// or `Notification` matcher=permission_prompt). More urgent than
-    /// `awaitingInput`; drives the cyan dot. Outranks every other status.
+    /// `awaitingInput` and outranks every other status. Shares the green
+    /// "needs attention" dot with `awaitingInput` (unified in commit 4a8cd32).
     var awaitingPermission: Bool = false
     /// Claude is compacting context (`PreCompact` fired, `PostCompact` has
     /// not). Drives the orange pulsing dot.
