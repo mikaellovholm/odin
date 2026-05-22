@@ -231,6 +231,9 @@ extension TerminalRepresentable {
         let onSizeChanged: (Int, Int) -> Void
         let onTitleChanged: ((String) -> Void)?
         weak var terminalView: TerminalView?
+        #if os(macOS)
+        private var keyMonitor: Any?
+        #endif
 
         init(onDataSend: @escaping (ArraySlice<UInt8>) -> Void,
              onSizeChanged: @escaping (Int, Int) -> Void,
@@ -238,7 +241,40 @@ extension TerminalRepresentable {
             self.onDataSend = onDataSend
             self.onSizeChanged = onSizeChanged
             self.onTitleChanged = onTitleChanged
+            super.init()
+            #if os(macOS)
+            installShiftReturnMonitor()
+            #endif
         }
+
+        #if os(macOS)
+        deinit {
+            if let keyMonitor {
+                NSEvent.removeMonitor(keyMonitor)
+            }
+        }
+
+        /// Maps Shift+Return → ESC+CR (the byte sequence Option+Enter produces),
+        /// which Claude Code's TUI treats as "insert newline" rather than
+        /// "submit". A local key monitor pre-empts SwiftTerm's keyDown handling
+        /// because `TerminalView.keyDown(with:)` is `public` (not `open`) and
+        /// can't be overridden from outside the module. Scoped to "our own
+        /// terminal view is firstResponder" so other panes / windows are
+        /// unaffected.
+        private func installShiftReturnMonitor() {
+            keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self,
+                      let tv = self.terminalView,
+                      event.window === tv.window,
+                      event.window?.firstResponder === tv,
+                      event.keyCode == 36,
+                      event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .shift
+                else { return event }
+                self.onDataSend(ArraySlice([0x1b, 0x0d]))
+                return nil
+            }
+        }
+        #endif
 
         func send(source: TerminalView, data: ArraySlice<UInt8>) {
             onDataSend(data)
