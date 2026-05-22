@@ -134,18 +134,40 @@ enum WorktreeService {
 
     /// If `path` is a linked worktree, returns the main worktree's path.
     /// Returns `nil` for the main worktree itself, a non-worktree git repo,
-    /// or any non-git folder — i.e. "nothing to prompt about on removal".
-    static func mainWorktreePath(for path: String) async -> String? {
-        let common = await runGit(["rev-parse", "--git-common-dir"], cwd: path)
-        let gitDir = await runGit(["rev-parse", "--git-dir"], cwd: path)
-        guard common.exitCode == 0, gitDir.exitCode == 0 else { return nil }
-        let absCommon = absolutize(common.output, relativeTo: path)
-        let absDir = absolutize(gitDir.output, relativeTo: path)
-        // Main worktree: --git-dir and --git-common-dir resolve to the same
-        // place. Linked worktree: --git-dir points inside the main repo's
-        // `.git/worktrees/<name>`, --git-common-dir points at the main `.git`.
-        if absCommon == absDir { return nil }
-        return URL(fileURLWithPath: absCommon).deletingLastPathComponent().path
+    /// a submodule, or any non-git folder — i.e. "nothing to prompt about
+    /// on removal". Detection is filesystem-only (no `git` subprocess): a
+    /// linked worktree's `.git` is a regular file whose single
+    /// `gitdir: <main>/.git/worktrees/<name>` line points back at the main
+    /// repo. Submodules use the same scheme with `.git/modules/<name>`, so
+    /// we reject anything whose gitdir parent isn't `worktrees`.
+    static func mainWorktreePath(for path: String) -> String? {
+        let gitFile = URL(fileURLWithPath: path).appendingPathComponent(".git")
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: gitFile.path, isDirectory: &isDir),
+              !isDir.boolValue else {
+            return nil
+        }
+        guard let contents = try? String(contentsOf: gitFile, encoding: .utf8) else {
+            return nil
+        }
+        var gitdir: String?
+        for raw in contents.split(whereSeparator: { $0 == "\n" || $0 == "\r" }) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            guard line.hasPrefix("gitdir:") else { continue }
+            gitdir = String(line.dropFirst("gitdir:".count))
+                .trimmingCharacters(in: .whitespaces)
+            break
+        }
+        guard let raw = gitdir, !raw.isEmpty else { return nil }
+        // git writes the gitdir relative to the worktree directory itself.
+        let resolved: URL = raw.hasPrefix("/")
+            ? URL(fileURLWithPath: raw)
+            : URL(fileURLWithPath: path).appendingPathComponent(raw)
+        let standardized = resolved.standardizedFileURL
+        let parent = standardized.deletingLastPathComponent()
+        guard parent.lastPathComponent == "worktrees" else { return nil }
+        // …/<main>/.git/worktrees/<name> → strip `worktrees` and `.git`.
+        return parent.deletingLastPathComponent().deletingLastPathComponent().path
     }
 
     /// Deletes a linked worktree by running `git worktree remove --force` from
@@ -158,15 +180,6 @@ enum WorktreeService {
             let message = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
             throw WorktreeError.gitFailed(message.isEmpty ? "exit \(result.exitCode)" : message)
         }
-    }
-
-    private static func absolutize(_ raw: String, relativeTo cwd: String) -> String {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.hasPrefix("/") { return trimmed }
-        return URL(fileURLWithPath: cwd)
-            .appendingPathComponent(trimmed)
-            .standardizedFileURL
-            .path
     }
 
     private struct GitResult {

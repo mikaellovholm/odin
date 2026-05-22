@@ -41,12 +41,8 @@ struct FileViewerView: View {
         .focusable()
         .focused($contentFocused)
         .focusEffectDisabled()
-        .onKeyPress(keys: [.upArrow, .downArrow, .escape]) { press in
+        .onKeyPress(keys: [.upArrow, .downArrow]) { press in
             switch press.key {
-            case .escape:
-                viewModel.clearSelection()
-                viewModel.requestFocus(.tree)
-                return .handled
             case .upArrow:
                 guard !cachedLines.isEmpty else { return .ignored }
                 focusedLine = max(0, focusedLine - 1)
@@ -59,11 +55,31 @@ struct FileViewerView: View {
                 return .ignored
             }
         }
+        // Esc is routed through `onExitCommand` rather than `onKeyPress`
+        // because the markdown preview's `Markdown(...).textSelection(.enabled)`
+        // becomes an NSTextView once clicked, and NSTextView swallows raw
+        // keyDown(Esc) before our onKeyPress fires. `onExitCommand` hooks the
+        // `cancelOperation:` action message, which AppKit bubbles up the
+        // responder chain when NSTextView declines to handle it.
+        .onExitCommand {
+            guard viewModel.selectedFileURL != nil else { return }
+            viewModel.clearSelection()
+            viewModel.requestFocus(.tree)
+        }
         // VM bumps the generation counter when the user presses Enter on a
         // file in the tree. We grab keyboard focus and reset to line 1.
         .onChange(of: viewModel.focusGeneration) { _, _ in
             if viewModel.focusTarget == .viewer {
                 focusedLine = 0
+                DispatchQueue.main.async { contentFocused = true }
+            }
+        }
+        // Pressing Enter on a tree row bumps `focusGeneration` and sets
+        // `selectedFileURL` in the same tick. The viewer mounts for the first
+        // time *with* the new generation value, so `.onChange` registers it as
+        // the baseline and never fires. Catch that case here on first appear.
+        .onAppear {
+            if viewModel.focusTarget == .viewer {
                 DispatchQueue.main.async { contentFocused = true }
             }
         }

@@ -268,7 +268,7 @@ struct ClaudeSessionListView: View {
     private func removeSession(_ session: ClaudeSession) {
         let path = session.workingDirectory
         Task { @MainActor in
-            let main = await WorktreeService.mainWorktreePath(for: path)
+            let main = WorktreeService.mainWorktreePath(for: path)
             guard let mainPath = main else {
                 store.remove(session)
                 return
