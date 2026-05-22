@@ -54,6 +54,9 @@ struct OdinApp: App {
         .modelContainer(container)
         #if os(macOS)
         .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button("About Odin") { showAboutPanel() }
+            }
             CommandGroup(replacing: .newItem) {
                 /// ⌘N is context-sensitive: the title and effect track
                 /// `selectedTab` so a single shortcut creates a new item in
@@ -93,6 +96,10 @@ struct OdinApp: App {
         case .todos:    return "New Todo"
         case .remote:   return "New"
         }
+    }
+
+    private func showAboutPanel() {
+        AboutWindowController.shared.show()
     }
 
     private func performNewItem() {
