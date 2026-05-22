@@ -98,7 +98,7 @@ enum ProjectService {
     }
 
     static func isGitRepo(_ cwd: String) async -> Bool {
-        let r = await runGit(["rev-parse", "--git-dir"], cwd: cwd)
+        let r = await GitCommand.run(["rev-parse", "--git-dir"], cwd: cwd)
         return r.exitCode == 0
     }
 
@@ -111,7 +111,7 @@ enum ProjectService {
         // tracked files; --exclude-standard honours .gitignore /
         // .git/info/exclude / core.excludesFile. -z gives NUL-separated paths
         // (safe for any filename).
-        let r = await runGit(
+        let r = await GitCommand.run(
             ["ls-files", "--others", "--cached", "--exclude-standard", "-z"],
             cwd: cwd
         )
@@ -121,7 +121,7 @@ enum ProjectService {
         var seen = Set<String>()
         var paths: [String] = []
         var truncated = false
-        for part in r.output.split(separator: "\0", omittingEmptySubsequences: true) {
+        for part in r.stdout.split(separator: "\0", omittingEmptySubsequences: true) {
             let path = String(part)
             if seen.insert(path).inserted {
                 paths.append(path)
@@ -298,38 +298,5 @@ enum ProjectService {
         }
     }
 
-    // MARK: - Process
-
-    private struct GitResult {
-        let exitCode: Int32
-        let output: String
-    }
-
-    private static func runGit(_ args: [String], cwd: String) async -> GitResult {
-        await withCheckedContinuation { (cont: CheckedContinuation<GitResult, Never>) in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let proc = Process()
-                proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-                proc.arguments = ["git"] + args
-                proc.currentDirectoryURL = URL(fileURLWithPath: cwd)
-                let stdout = Pipe()
-                let stderr = Pipe()
-                proc.standardOutput = stdout
-                proc.standardError = stderr
-                do {
-                    try proc.run()
-                    let outData = stdout.fileHandleForReading.readDataToEndOfFile()
-                    _ = stderr.fileHandleForReading.readDataToEndOfFile()
-                    proc.waitUntilExit()
-                    cont.resume(returning: GitResult(
-                        exitCode: proc.terminationStatus,
-                        output: String(data: outData, encoding: .utf8) ?? ""
-                    ))
-                } catch {
-                    cont.resume(returning: GitResult(exitCode: -1, output: ""))
-                }
-            }
-        }
-    }
 }
 #endif

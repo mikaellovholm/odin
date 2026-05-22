@@ -6,23 +6,23 @@ enum OdinMCPTools {
         [
             "name": "run_background_task",
             "description": """
-            Spawn a headless Claude Code session in the background to perform a single task. \
-            Returns immediately with a task_id. Use await_task to retrieve the result, or \
-            get_task_status to poll without blocking. The background session has no UI and \
-            runs with --dangerously-skip-permissions, so scope its prompt narrowly. \
-            For odin-review reviewer workers, pass review_id (from start_review_run) and \
-            concern — the worker then gets MCP access to submit_finding/complete_review_worker.
+            Spawn a Phase-1 review worker for an Odin review run. Returns immediately with a \
+            task_id. The worker runs headless with a scoped tool allow-list (Read, Grep, Glob, \
+            Bash, plus mcp__odin__submit_finding and mcp__odin__complete_review_worker) — it \
+            cannot edit files. Requires `review_id` (from start_review_run) and `concern`. \
+            For free-form background prompts there is no longer a tool — use start_review_run \
+            and dispatch reviewers instead.
             """,
             "inputSchema": [
                 "type": "object",
                 "properties": [
                     "prompt": [
                         "type": "string",
-                        "description": "The prompt the background session will execute. Be specific about the expected output format."
+                        "description": "The prompt the worker will execute. Be specific about the expected output format."
                     ],
                     "cwd": [
                         "type": "string",
-                        "description": "Working directory for the background session. Defaults to the user's home directory."
+                        "description": "Working directory for the worker. Defaults to the user's home directory."
                     ],
                     "model": [
                         "type": "string",
@@ -30,14 +30,14 @@ enum OdinMCPTools {
                     ],
                     "review_id": [
                         "type": "string",
-                        "description": "Optional. Id returned by start_review_run. When set together with `concern`, the worker is registered as a Phase-1 reviewer and given MCP access to submit_finding/complete_review_worker."
+                        "description": "Required. Id returned by start_review_run. Scopes the worker's MCP access to this review."
                     ],
                     "concern": [
                         "type": "string",
-                        "description": "Optional. Required when review_id is set. One of correctness / security / tests / style / performance / api-compat (or any single concern name your review run declared)."
+                        "description": "Required. One of correctness / security / tests / style / performance / api-compat (or any single concern name your review run declared)."
                     ]
                 ],
-                "required": ["prompt"]
+                "required": ["prompt", "review_id", "concern"]
             ]
         ],
         [
@@ -258,22 +258,23 @@ enum OdinMCPTools {
         }
         let cwd = (args["cwd"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? NSHomeDirectory()
         let model = (args["model"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-        let reviewId = (args["review_id"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-        let concern = (args["concern"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-
-        var reviewContext: ReviewWorkerContext?
-        if let reviewId {
-            guard let concern else {
-                throw OdinMCPError.invalidArgument("concern is required when review_id is set")
-            }
-            guard ReviewRunRegistry.shared.get(reviewId) != nil else {
-                throw OdinMCPError.invalidArgument("review run not found: \(reviewId)")
-            }
-            reviewContext = ReviewWorkerContext(
-                reviewId: reviewId,
-                role: .reviewer(concern: concern)
-            )
+        // Free-form background spawning was removed when workers stopped
+        // running with --dangerously-skip-permissions: the new allow-list
+        // scoping is keyed on the worker's role, so every worker must
+        // declare what review it belongs to.
+        guard let reviewId = (args["review_id"] as? String).flatMap({ $0.isEmpty ? nil : $0 }) else {
+            throw OdinMCPError.invalidArgument("review_id is required — call start_review_run first")
         }
+        guard let concern = (args["concern"] as? String).flatMap({ $0.isEmpty ? nil : $0 }) else {
+            throw OdinMCPError.invalidArgument("concern is required")
+        }
+        guard ReviewRunRegistry.shared.get(reviewId) != nil else {
+            throw OdinMCPError.invalidArgument("review run not found: \(reviewId)")
+        }
+        let reviewContext = ReviewWorkerContext(
+            reviewId: reviewId,
+            role: .reviewer(concern: concern)
+        )
 
         let runner = try BackgroundTaskRegistry.shared.create(
             prompt: prompt,
@@ -285,27 +286,21 @@ enum OdinMCPTools {
 
         // Register the concern as running only after the spawn succeeded, so a
         // crashed spawn doesn't leave a phantom "running" concern in the panel.
-        if let reviewId, let concern {
-            ReviewRunRegistry.shared.markConcernRunning(
-                reviewId: reviewId,
-                concern: concern,
-                taskId: runner.id
-            )
-        }
+        ReviewRunRegistry.shared.markConcernRunning(
+            reviewId: reviewId,
+            concern: concern,
+            taskId: runner.id
+        )
 
         var response: [String: Any] = [
             "task_id": runner.id,
             "status": "running",
-            "cwd": cwd
+            "cwd": cwd,
+            "review_id": reviewId,
+            "concern": concern
         ]
         if let model {
             response["model"] = model
-        }
-        if let reviewId {
-            response["review_id"] = reviewId
-        }
-        if let concern {
-            response["concern"] = concern
         }
         return jsonString(response)
     }
@@ -663,7 +658,7 @@ enum OdinMCPTools {
         var dict: [String: Any] = [
             "task_id": runner.id,
             "cwd": runner.cwd,
-            "created_at": ISO8601DateFormatter().string(from: runner.createdAt)
+            "created_at": isoFormatter.string(from: runner.createdAt)
         ]
         switch runner.state {
         case .running:

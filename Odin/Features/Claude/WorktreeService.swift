@@ -44,19 +44,24 @@ enum WorktreeService {
         return "\(parent)/\(base)--\(name)"
     }
 
-    /// Validate the user-supplied name. We're stricter than `git check-ref-format`
-    /// because the name also becomes a path component (`<base>--<name>`), so we
-    /// reject slashes and dots up front for a friendlier error than git's.
+    /// Validate the user-supplied name with an allow-list. The name becomes
+    /// both a git branch ref (`-b <name>`) and a path component
+    /// (`<base>--<name>`), so the safer default is "only characters we know
+    /// are fine in both contexts". Process arguments go directly to git
+    /// (no shell), so shell metacharacters can't escape — this is robustness,
+    /// not injection defence.
     static func validate(name: String) throws {
         if name.isEmpty {
             throw WorktreeError.invalidName("name is empty")
         }
-        if name.hasPrefix("-") {
-            throw WorktreeError.invalidName("name can't start with '-'")
-        }
-        let illegal: Set<Character> = ["/", "\\", " ", ":", "~", "^", "?", "*", "[", "]", "\0"]
-        if name.contains(where: { illegal.contains($0) }) {
-            throw WorktreeError.invalidName("name can't contain spaces or any of / \\ : ~ ^ ? * [ ]")
+        // Must start with an alphanumeric (rules out leading `-`, `.`, `/`,
+        // and the noisy set of git-special prefixes), then up to 127 more
+        // chars from a conservative set: alphanumerics, `.`, `_`, `-`, `/`.
+        let pattern = #"^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$"#
+        if name.range(of: pattern, options: .regularExpression) == nil {
+            throw WorktreeError.invalidName(
+                "must start with a letter or digit; allowed chars: A-Z a-z 0-9 . _ - /"
+            )
         }
         if name.contains("..") {
             throw WorktreeError.invalidName("name can't contain '..'")
@@ -66,7 +71,7 @@ enum WorktreeService {
     static func create(sourcePath: String, name: String) async throws -> String {
         try validate(name: name)
 
-        let probe = await runGit(["rev-parse", "--git-dir"], cwd: sourcePath)
+        let probe = await GitCommand.run(["rev-parse", "--git-dir"], cwd: sourcePath)
         guard probe.exitCode == 0 else {
             throw WorktreeError.notAGitRepo(sourcePath)
         }
@@ -76,9 +81,9 @@ enum WorktreeService {
             throw WorktreeError.targetExists(target)
         }
 
-        let fetch = await runGit(["fetch", "origin"], cwd: sourcePath)
+        let fetch = await GitCommand.run(["fetch", "origin"], cwd: sourcePath)
         guard fetch.exitCode == 0 else {
-            let message = fetch.output.trimmingCharacters(in: .whitespacesAndNewlines)
+            let message = fetch.combined.trimmingCharacters(in: .whitespacesAndNewlines)
             throw WorktreeError.fetchFailed(message.isEmpty ? "exit \(fetch.exitCode)" : message)
         }
 
@@ -86,12 +91,12 @@ enum WorktreeService {
 
         // `--` ends option parsing so a hypothetical future change that lets a
         // `-`-prefixed value slip through doesn't get treated as a flag.
-        let result = await runGit(
+        let result = await GitCommand.run(
             ["worktree", "add", "-b", name, "--", target, startPoint],
             cwd: sourcePath
         )
         guard result.exitCode == 0 else {
-            let message = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+            let message = result.combined.trimmingCharacters(in: .whitespacesAndNewlines)
             throw WorktreeError.gitFailed(message.isEmpty ? "exit \(result.exitCode)" : message)
         }
         return target
@@ -101,21 +106,21 @@ enum WorktreeService {
     /// `origin/main`, but resolved dynamically so repos using `master`,
     /// `develop`, or anything else still work.
     private static func resolveDefaultStartPoint(cwd: String) async throws -> String {
-        let symbolic = await runGit(
+        let symbolic = await GitCommand.run(
             ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
             cwd: cwd
         )
         if symbolic.exitCode == 0 {
-            let value = symbolic.output.trimmingCharacters(in: .whitespacesAndNewlines)
+            let value = symbolic.combined.trimmingCharacters(in: .whitespacesAndNewlines)
             if !value.isEmpty {
                 return value
             }
         }
         // `origin/HEAD` may be unset on older clones; ask the remote directly.
-        let remoteShow = await runGit(["remote", "show", "origin"], cwd: cwd)
+        let remoteShow = await GitCommand.run(["remote", "show", "origin"], cwd: cwd)
         if remoteShow.exitCode == 0 {
             let prefix = "HEAD branch:"
-            for line in remoteShow.output.split(separator: "\n") {
+            for line in remoteShow.combined.split(separator: "\n") {
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
                 guard trimmed.hasPrefix(prefix) else { continue }
                 let branch = trimmed
@@ -175,43 +180,12 @@ enum WorktreeService {
     /// stay in the main repo's refs, so the only thing at risk is uncommitted
     /// changes — which the caller is expected to have warned the user about.
     static func removeWorktree(target: String, mainPath: String) async throws {
-        let result = await runGit(["worktree", "remove", "--force", "--", target], cwd: mainPath)
+        let result = await GitCommand.run(["worktree", "remove", "--force", "--", target], cwd: mainPath)
         guard result.exitCode == 0 else {
-            let message = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+            let message = result.combined.trimmingCharacters(in: .whitespacesAndNewlines)
             throw WorktreeError.gitFailed(message.isEmpty ? "exit \(result.exitCode)" : message)
         }
     }
 
-    private struct GitResult {
-        let exitCode: Int32
-        let output: String
-    }
-
-    private static func runGit(_ args: [String], cwd: String) async -> GitResult {
-        await withCheckedContinuation { (continuation: CheckedContinuation<GitResult, Never>) in
-            DispatchQueue.global().async {
-                let proc = Process()
-                proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-                proc.arguments = ["git"] + args
-                proc.currentDirectoryURL = URL(fileURLWithPath: cwd)
-                let pipe = Pipe()
-                proc.standardOutput = pipe
-                proc.standardError = pipe
-                do {
-                    try proc.run()
-                    proc.waitUntilExit()
-                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                    let output = String(data: data, encoding: .utf8) ?? ""
-                    continuation.resume(
-                        returning: GitResult(exitCode: proc.terminationStatus, output: output)
-                    )
-                } catch {
-                    continuation.resume(
-                        returning: GitResult(exitCode: -1, output: "\(error)")
-                    )
-                }
-            }
-        }
-    }
 }
 #endif

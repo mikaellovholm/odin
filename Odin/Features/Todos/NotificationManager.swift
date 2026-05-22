@@ -17,9 +17,33 @@ final class NotificationManager {
         hasRequestedPermission = true
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             if let error {
-                print("Notification permission error: \(error.localizedDescription)")
+                NSLog("[Odin] notification permission error: \(error.localizedDescription)")
+                NotificationManager.recordDiagnosticsFailure(
+                    "Permission request failed: \(error.localizedDescription)"
+                )
+            } else if !granted {
+                NotificationManager.recordDiagnosticsFailure(
+                    "Reminders disabled — enable notifications for Odin in System Settings."
+                )
+            } else {
+                NotificationManager.recordDiagnosticsOK()
             }
             completion(granted)
+        }
+    }
+
+    /// Hop to MainActor to write the diagnostics singleton. NotificationManager
+    /// itself isn't actor-isolated (it's a thin wrapper around an Apple API
+    /// whose callbacks fire on private queues), so we marshal on demand.
+    private static func recordDiagnosticsFailure(_ message: String) {
+        Task { @MainActor in
+            OdinDiagnostics.shared.notifications = .failed(message)
+        }
+    }
+
+    private static func recordDiagnosticsOK() {
+        Task { @MainActor in
+            OdinDiagnostics.shared.notifications = .ok
         }
     }
 
@@ -43,7 +67,10 @@ final class NotificationManager {
 
             UNUserNotificationCenter.current().add(request) { error in
                 if let error {
-                    print("Failed to schedule notification: \(error.localizedDescription)")
+                    NSLog("[Odin] failed to schedule notification: \(error.localizedDescription)")
+                    NotificationManager.recordDiagnosticsFailure(
+                        "Failed to schedule reminder: \(error.localizedDescription)"
+                    )
                 }
             }
         }
@@ -51,9 +78,5 @@ final class NotificationManager {
 
     func cancelReminder(id: String) {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])
-    }
-
-    func cancelAllReminders() {
-        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
     }
 }

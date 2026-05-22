@@ -21,22 +21,20 @@ struct ClaudeSessionDetailView: View {
     /// chromeless look; the sidebar's shortcut-hints footer documents them.
     private var paneShortcuts: some View {
         ZStack {
-            Button("") { session.projectPanelVisible.toggle() }
-                .keyboardShortcut("p", modifiers: [.command, .shift])
-            Button("") { session.shellPaneVisible.toggle() }
-                .keyboardShortcut("t", modifiers: [.command, .shift])
-            Button("") {
+            InvisibleShortcut("p", modifiers: [.command, .shift]) {
+                session.projectPanelVisible.toggle()
+            }
+            InvisibleShortcut("t", modifiers: [.command, .shift]) {
+                session.shellPaneVisible.toggle()
+            }
+            InvisibleShortcut("d", modifiers: [.command, .shift]) {
                 session.rightPaneMode = (session.rightPaneMode == .diff) ? .hidden : .diff
             }
-            .keyboardShortcut("d", modifiers: [.command, .shift])
-            Button("") {
+            InvisibleShortcut("r", modifiers: [.command, .shift]) {
                 session.rightPaneMode = (session.rightPaneMode == .review) ? .hidden : .review
             }
-            .keyboardShortcut("r", modifiers: [.command, .shift])
         }
-        .frame(width: 0, height: 0)
-        .opacity(0)
-        .allowsHitTesting(false)
+        .invisibleShortcutsContainer()
     }
 
     /// HSplitView columns from left to right (each conditional):

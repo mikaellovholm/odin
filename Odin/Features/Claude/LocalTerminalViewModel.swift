@@ -39,7 +39,8 @@ final class LocalTerminalViewModel {
     var awaitingInput: Bool = false
     /// Claude raised a permission/approval prompt (`PermissionRequest` hook
     /// or `Notification` matcher=permission_prompt). More urgent than
-    /// `awaitingInput`; drives the cyan dot. Outranks every other status.
+    /// `awaitingInput` and outranks every other status. Shares the green
+    /// "needs attention" dot with `awaitingInput` (unified in commit 4a8cd32).
     var awaitingPermission: Bool = false
     /// Claude is compacting context (`PreCompact` fired, `PostCompact` has
     /// not). Drives the orange pulsing dot.
@@ -58,6 +59,14 @@ final class LocalTerminalViewModel {
     /// and watched by `statusFileSource`. Cleaned up on teardown.
     private var statusFilePath: String?
     private var statusFileSource: DispatchSourceFileSystemObject?
+    /// Count of consecutive watcher re-attaches inside `statusReattachWindow`.
+    /// Resets to 0 on any successful read. Caps runaway re-open loops if the
+    /// hook ever switches to a write pattern we genuinely can't recover from.
+    private var statusReattachAttempts = 0
+    /// Maximum consecutive re-attaches before we give up and leave the
+    /// sidebar status frozen. Six attempts ≈ three lifecycle bursts of two
+    /// renames each; well above any normal hook write.
+    private static let statusMaxReattachAttempts = 6
 
     /// Directory containing one marker file per running subagent. The hook
     /// adds/removes files on `SubagentStart`/`SubagentStop`; the view model
@@ -80,7 +89,7 @@ final class LocalTerminalViewModel {
     private static let heartbeatIdleThreshold: TimeInterval = 6.0
 
     private var process: LocalProcess?
-    private var bridge: ProcessBridge?
+    private var bridge: LocalProcessClosureDelegate?
     private(set) weak var terminalView: TerminalView?
 
     func setTerminalView(_ tv: TerminalView) {
@@ -105,12 +114,13 @@ final class LocalTerminalViewModel {
 
         var args: [String] = []
         if let mcpURL = OdinMCPServer.shared.mcpURL,
-           let configPath = Self.writeMCPConfig(url: mcpURL, sessionId: sessionId) {
+           let authToken = OdinMCPServer.shared.authToken,
+           let configPath = Self.writeMCPConfig(url: mcpURL, sessionId: sessionId, authToken: authToken) {
             args.append(contentsOf: ["--mcp-config", configPath])
             mcpConfigPath = configPath
         }
 
-        let bridge = ProcessBridge(
+        let bridge = LocalProcessClosureDelegate(
             onData: { [weak self] slice in
                 self?.terminalView?.feed(byteArray: slice)
                 self?.noteDataReceived()
@@ -136,18 +146,15 @@ final class LocalTerminalViewModel {
 
         let proc = LocalProcess(delegate: bridge, dispatchQueue: .main)
         process = proc
-        // GUI apps inherit PATH from launchd, which doesn't source the user's
-        // shell rc files, so claude (and anything it shells out to) would see
-        // a bare PATH. Spawn through an interactive login shell (`-ilc`) so
-        // both ~/.zprofile and ~/.zshrc are sourced — the Claude installer
-        // adds ~/.local/bin to PATH in ~/.zshrc, which a non-interactive
-        // login shell would skip.
-        // `exec "$@"` replaces zsh with claude so the child PID is claude
-        // itself — terminate()/heartbeat behaviour is unchanged.
-        let shellArgs = ["-ilc", "exec \"$@\"", "zsh", claudePath] + args
+        // Spawn claude directly with an explicit PATH instead of going through
+        // `zsh -ilc`. Sourcing ~/.zprofile / ~/.zshrc trusts files an attacker
+        // (or a buggy script) could have rewritten, and `which claude` from
+        // such a shell would happily return a poisoned binary. The PATH below
+        // covers the standard claude install locations plus the usual system
+        // dirs claude shells out to for git/npm/etc.
         proc.startProcess(
-            executable: "/bin/zsh",
-            args: shellArgs,
+            executable: claudePath,
+            args: args,
             environment: Self.buildEnvironment(sessionId: sessionId),
             execName: nil,
             currentDirectory: workingDirectory
@@ -243,9 +250,19 @@ final class LocalTerminalViewModel {
         )
         let path = dir + "/\(sessionId).state"
         subagentDirPath = dir + "/\(sessionId).subagents"
+        statusFilePath = path
+        statusReattachAttempts = 0
+        attachStatusWatcher(path: path)
+    }
+
+    /// Opens the state file, creates a kqueue source for it, and arms the
+    /// reattach handler. Extracted from `startStatusWatcher` so we can call
+    /// it again from `reattachStatusWatcherIfNeeded` when the file is
+    /// replaced via atomic rename (the hook currently uses
+    /// truncate-and-overwrite, but a future change could switch — better to
+    /// defend now than fail silently then).
+    private func attachStatusWatcher(path: String) {
         // Pre-create with empty content so we have a stable inode to watch.
-        // Subsequent hook writes are truncate-and-overwrite (same inode), so a
-        // single file-level kqueue source catches every state transition.
         if !FileManager.default.fileExists(atPath: path) {
             FileManager.default.createFile(atPath: path, contents: nil)
         }
@@ -254,7 +271,6 @@ final class LocalTerminalViewModel {
             NSLog("[Odin] failed to open status file for watching: \(path)")
             return
         }
-        statusFilePath = path
         let src = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd,
             // .attrib catches the `touch` nudges that subagent-start/-stop
@@ -262,8 +278,18 @@ final class LocalTerminalViewModel {
             eventMask: [.write, .extend, .delete, .rename, .attrib],
             queue: .main
         )
-        src.setEventHandler { [weak self] in
-            self?.readStatusFile()
+        // Capture `src` so the handler can read the actual event mask via
+        // `data` and react to .delete/.rename specifically — we need to know
+        // *why* we were notified before deciding whether to re-open the file.
+        src.setEventHandler { [weak self, weak src] in
+            guard let self else { return }
+            let mask = src?.data ?? []
+            if mask.contains(.delete) || mask.contains(.rename) {
+                self.reattachStatusWatcherIfNeeded()
+            } else {
+                self.statusReattachAttempts = 0
+                self.readStatusFile()
+            }
         }
         src.setCancelHandler {
             close(fd)
@@ -273,6 +299,28 @@ final class LocalTerminalViewModel {
         // Pick up any state already written (e.g. if a hook fired between
         // pre-create and watcher attach).
         readStatusFile()
+    }
+
+    /// Called when the watcher fires `.delete` or `.rename` — the original
+    /// inode is gone, so the existing FD will never see another event. Cancel
+    /// the dead source and re-open against the path on the next runloop tick
+    /// (the hook script that triggered the rename may still be finishing its
+    /// write). Bails after a small number of consecutive attempts to avoid a
+    /// runaway loop if the hook ever genuinely deletes the file on every event.
+    private func reattachStatusWatcherIfNeeded() {
+        statusReattachAttempts += 1
+        guard statusReattachAttempts <= Self.statusMaxReattachAttempts else {
+            NSLog("[Odin] status watcher re-attach limit hit; status updates paused for this session")
+            statusFileSource?.cancel()
+            statusFileSource = nil
+            return
+        }
+        statusFileSource?.cancel()
+        statusFileSource = nil
+        guard let path = statusFilePath else { return }
+        DispatchQueue.main.async { [weak self] in
+            self?.attachStatusWatcher(path: path)
+        }
     }
 
     private func stopStatusWatcher() {
@@ -403,24 +451,23 @@ final class LocalTerminalViewModel {
         pendingNotifications.removeAll { $0.id == id }
     }
 
-    func dismissAllBackgroundNotifications() {
-        pendingNotifications.removeAll()
-    }
-
     // MARK: - MCP Config
 
     /// Writes a per-launch .mcp.json that points the spawned claude at Odin's
     /// in-process MCP server. Returns the temp file path, or nil on failure.
     /// The X-Session-Id header lets the server identify which Odin tab made a
     /// given tool call so background-task completions can be routed back.
-    private static func writeMCPConfig(url: String, sessionId: String) -> String? {
+    /// X-Odin-Auth carries the per-launch shared secret — without it the
+    /// server returns 401, so external loopback clients can't drive the MCP.
+    private static func writeMCPConfig(url: String, sessionId: String, authToken: String) -> String? {
         let dict: [String: Any] = [
             "mcpServers": [
                 "odin": [
                     "type": "http",
                     "url": url,
                     "headers": [
-                        "X-Session-Id": sessionId
+                        "X-Session-Id": sessionId,
+                        "X-Odin-Auth": authToken
                     ]
                 ]
             ]
@@ -445,44 +492,13 @@ final class LocalTerminalViewModel {
         env["COLORTERM"] = "truecolor"
         env["ODIN_SESSION_ID"] = sessionId
         if env["LANG"] == nil { env["LANG"] = "en_US.UTF-8" }
+        // Explicit PATH — see startClaude for why we don't trust rc-sourced
+        // values. Standard claude install locations come first; system dirs
+        // last so claude can still find git, node, etc.
+        let home = NSHomeDirectory()
+        env["PATH"] = "\(home)/.claude/local:/opt/homebrew/bin:/usr/local/bin:\(home)/.local/bin:/usr/bin:/bin"
         return env.map { "\($0.key)=\($0.value)" }
     }
 }
 
-// MARK: - Process Delegate Bridge
-
-/// Bridges LocalProcessDelegate callbacks to closures.
-/// All callbacks execute on the main dispatch queue (set via LocalProcess init).
-@MainActor
-private final class ProcessBridge: LocalProcessDelegate, @unchecked Sendable {
-    let onData: (ArraySlice<UInt8>) -> Void
-    let onTerminated: (Int32?) -> Void
-    let onGetWindowSize: () -> winsize
-
-    init(onData: @escaping (ArraySlice<UInt8>) -> Void,
-         onTerminated: @escaping (Int32?) -> Void,
-         onGetWindowSize: @escaping () -> winsize) {
-        self.onData = onData
-        self.onTerminated = onTerminated
-        self.onGetWindowSize = onGetWindowSize
-    }
-
-    nonisolated func processTerminated(_ source: LocalProcess, exitCode: Int32?) {
-        MainActor.assumeIsolated {
-            self.onTerminated(exitCode)
-        }
-    }
-
-    nonisolated func dataReceived(slice: ArraySlice<UInt8>) {
-        MainActor.assumeIsolated {
-            self.onData(slice)
-        }
-    }
-
-    nonisolated func getWindowSize() -> winsize {
-        MainActor.assumeIsolated {
-            self.onGetWindowSize()
-        }
-    }
-}
 #endif

@@ -2,49 +2,38 @@
 import Foundation
 
 enum ClaudePath {
-    // Cached after the first call. Both successful and failed lookups are
-    // cached so the expensive zsh shell-out only ever runs once per launch.
-    // All callers run on @MainActor, so no locking is needed.
-    private static var _resolved = false
-    private static var _cachedPath: String? = nil
+    /// `@AppStorage` key for the Settings override. When set to a non-empty
+    /// path that exists and is executable, it short-circuits the allow-list
+    /// lookup — escape hatch for users whose `claude` lives somewhere we
+    /// don't anticipate (custom prefix, version manager). Still bypasses the
+    /// shell entirely, so a poisoned rc file can't sneak through.
+    static let overrideKey = "claude.binaryPathOverride"
 
-    static func resolve() -> String? {
-        if _resolved { return _cachedPath }
-        _resolved = true
-        _cachedPath = _freshResolve()
-        return _cachedPath
-    }
-
-    private static func _freshResolve() -> String? {
-        let knownPaths = [
-            "/usr/local/bin/claude",
+    /// Allow-list of known-good install locations. Public so Settings can
+    /// show users where we'd look by default.
+    static var knownPaths: [String] {
+        [
+            "\(NSHomeDirectory())/.claude/local/claude",
             "/opt/homebrew/bin/claude",
+            "/usr/local/bin/claude",
             "\(NSHomeDirectory())/.local/bin/claude",
         ]
+    }
+
+    static func resolve() -> String? {
+        // No caching: cheap (stat × 5) and the user can change the override
+        // via Settings at any time. Caching would surprise them.
+        if let override = UserDefaults.standard.string(forKey: overrideKey)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !override.isEmpty,
+           FileManager.default.isExecutableFile(atPath: override) {
+            return override
+        }
         for path in knownPaths {
             if FileManager.default.isExecutableFile(atPath: path) {
                 return path
             }
         }
-
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        proc.arguments = ["-lc", "which claude"]
-        let pipe = Pipe()
-        proc.standardOutput = pipe
-        proc.standardError = FileHandle.nullDevice
-        do {
-            try proc.run()
-            proc.waitUntilExit()
-            guard proc.terminationStatus == 0 else { return nil }
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let path = String(data: data, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-               !path.isEmpty,
-               FileManager.default.isExecutableFile(atPath: path) {
-                return path
-            }
-        } catch {}
         return nil
     }
 }

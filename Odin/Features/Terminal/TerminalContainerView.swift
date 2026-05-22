@@ -5,6 +5,7 @@ struct TerminalContainerView: View {
     @State private var viewModel = TerminalViewModel()
     @State private var keyboardDismissed = false
     @AppStorage(TerminalFontSettings.key) private var fontSize: Double = Double(TerminalFontSettings.defaultSize)
+    @AppStorage(TerminalViewModel.sshUsernameKey) private var sshUsername: String = ""
     #if os(iOS)
     @State private var keyboardVisible = false
     #endif
@@ -69,6 +70,19 @@ struct TerminalContainerView: View {
                         selectedTab = .todos
                     } label: {
                         Image(systemName: "checklist")
+                            .font(.system(size: 20))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(Color(red: 0.06, green: 0.11, blue: 0.18), in: RoundedRectangle(cornerRadius: 10))
+                    }
+                    // Disconnect — the tab bar is hidden while connected, so
+                    // without this button there's no in-app way to drop the SSH
+                    // session short of force-killing the app. tmux on the VM
+                    // keeps the user's session alive across disconnects.
+                    Button {
+                        viewModel.disconnect()
+                    } label: {
+                        Image(systemName: "xmark.circle")
                             .font(.system(size: 20))
                             .foregroundStyle(.white)
                             .frame(width: 44, height: 44)
@@ -200,21 +214,57 @@ struct TerminalContainerView: View {
             }
 
         case .error(let message):
+            if let retryAt = viewModel.rateLimitedRetryAt {
+                rateLimitedOverlay(message: message, retryAt: retryAt)
+            } else {
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.largeTitle)
+                        .foregroundStyle(.orange)
+                    Text("Connection Error")
+                        .font(.headline)
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                    Button("Retry") {
+                        viewModel.connect()
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+        }
+    }
+
+    /// Specialised error overlay for the Cloud Function rate-limit. Renders a
+    /// live countdown via `TimelineView(.periodic)` and disables Retry until
+    /// the deadline has passed — without this, the generic Retry button just
+    /// hits the rate-limit again and the user can't tell why.
+    private func rateLimitedOverlay(message: String, retryAt: Date) -> some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let remaining = max(0, Int(retryAt.timeIntervalSince(context.date).rounded(.up)))
             VStack(spacing: 16) {
-                Image(systemName: "exclamationmark.triangle")
+                Image(systemName: "hourglass")
                     .font(.largeTitle)
                     .foregroundStyle(.orange)
-                Text("Connection Error")
+                Text("Cloud Function rate-limited")
                     .font(.headline)
                 Text(message)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
-                Button("Retry") {
+                if remaining > 0 {
+                    Text("Retry in \(remaining)s")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                Button(remaining > 0 ? "Retry in \(remaining)s" : "Retry") {
                     viewModel.connect()
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(remaining > 0)
             }
         }
     }
@@ -229,8 +279,38 @@ struct TerminalContainerView: View {
                 Text("Terminal Setup")
                     .font(.title2.bold())
 
+                // SSH username section — must come first; the connect flow
+                // refuses to proceed without it (no more hard-coded user).
+                if sshUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("Enter the SSH username for the VM:")
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+
+                    TextField("user_name", text: $sshUsername)
+                        .font(.system(.caption, design: .monospaced))
+                        .textFieldStyle(.roundedBorder)
+                        .padding(.horizontal)
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        #endif
+                        .autocorrectionDisabled()
+
+                    Text("Typically your GCP OS Login username (email with `@`/`.` replaced by `_`).")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+
+                    Button("Save Username") {
+                        // Trim whitespace; AppStorage already carries the value.
+                        sshUsername = sshUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(sshUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+
                 // API Key section
-                if !viewModel.hasAPIKey {
+                else if !viewModel.hasAPIKey {
                     Text("Enter the API key for the Cloud Function:")
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)

@@ -24,15 +24,19 @@ struct NoteDetailView: View {
                     .textFieldStyle(.plain)
                     .focused($titleFocused)
                 if !useSideBySide {
-                    ShortcutKey("⇧⌘M")
+                    // ⌥⌘M to avoid colliding with FileViewerView's ⇧⌘M
+                    // preview toggle — both can be active in the same
+                    // window when the Claude tab has the project panel open
+                    // alongside the Notes tab.
+                    ShortcutKey("⌥⌘M")
                     Button {
                         showPreview.toggle()
                     } label: {
                         Image(systemName: showPreview ? "pencil" : "eye")
                     }
                     .buttonStyle(.borderless)
-                    .help("Toggle preview (⇧⌘M)")
-                    .keyboardShortcut("m", modifiers: [.shift, .command])
+                    .help("Toggle preview (⌥⌘M)")
+                    .keyboardShortcut("m", modifiers: [.option, .command])
                 }
             }
             .padding(.horizontal)
@@ -69,6 +73,12 @@ struct NoteDetailView: View {
         }
         .onChange(of: note.title) { bumpUpdatedAtOnce() }
         .onChange(of: note.content) { bumpUpdatedAtOnce() }
+        // The bump-once flag is scoped to *this note*, not the view-mount.
+        // If the user navigates to another note and back inside the same
+        // detail-view instance, the flag stays true and a second round of
+        // edits wouldn't bump — reset the flag so each note gets its own
+        // first-edit bump.
+        .onChange(of: note.id) { _, _ in didBumpUpdatedAt = false }
     }
 
     private var editorView: some View {

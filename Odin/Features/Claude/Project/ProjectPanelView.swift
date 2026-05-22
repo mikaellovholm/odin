@@ -92,6 +92,7 @@ struct ProjectPanelView: View {
             }
             .buttonStyle(.borderless)
             .help("Refresh")
+            .accessibilityLabel("Refresh project tree")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

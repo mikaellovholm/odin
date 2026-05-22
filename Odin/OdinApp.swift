@@ -25,12 +25,22 @@ struct OdinApp: App {
 
         #if os(macOS)
         Task { @MainActor in
+            // Each subsystem reports its outcome to `OdinDiagnostics.shared`
+            // so the failure is surfaced in the Claude sidebar banner and
+            // the Settings diagnostics row, not just in `NSLog`. Installers
+            // already swallow per-file errors internally; we treat partial
+            // failure as ok and reserve the `failed` state for a thrown
+            // top-level error (e.g. inability to read `~/.claude`).
             OdinSkillInstaller.install()
+            OdinDiagnostics.shared.skills = .ok
             OdinHookInstaller.install()
+            OdinDiagnostics.shared.hooks = .ok
             do {
                 try OdinMCPServer.shared.start()
+                OdinDiagnostics.shared.mcpServer = .ok
             } catch {
                 NSLog("[OdinMCP] failed to start server: \(error)")
+                OdinDiagnostics.shared.mcpServer = .failed("\(error)")
             }
         }
         #endif
@@ -48,6 +58,27 @@ struct OdinApp: App {
                     // it (e.g. `.listStyle(.sidebar)`'s vibrant background)
                     // and show whatever is behind the app through the panel.
                     .background(OpaqueWindowAccessor())
+                    // SIGTERM every spawned `claude` / shell process and shut
+                    // the MCP listener before the app exits, so we don't leak
+                    // orphaned children. The kernel's PTY-close-on-exit
+                    // eventually delivers SIGHUP, but only after the FD chain
+                    // collapses, which can lag long enough to be visible in
+                    // `ps`. Cleaner to do it ourselves.
+                    .onReceive(
+                        NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)
+                    ) { _ in
+                        for session in claudeSessionStore.sessions {
+                            session.viewModel.terminate()
+                            session.shellViewModel.terminate()
+                        }
+                        // Also cancel every in-flight background worker so
+                        // review/fix tasks don't keep consuming API tokens
+                        // after the user has quit.
+                        for runner in BackgroundTaskRegistry.shared.all() {
+                            runner.cancel()
+                        }
+                        OdinMCPServer.shared.stop()
+                    }
                 #endif
             }
         }

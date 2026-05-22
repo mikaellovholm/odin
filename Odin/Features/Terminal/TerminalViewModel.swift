@@ -4,8 +4,16 @@ import SwiftTerm
 @Observable
 @MainActor
 final class TerminalViewModel {
-    private static let sshUsername = "mikael_lovholm_gmail_com"
+    /// `@AppStorage` key for the SSH username — exposed so Settings can bind
+    /// the same key. Default is empty so a fresh install lands in the setup
+    /// flow rather than connecting as some hard-coded user.
+    static let sshUsernameKey = "ssh.username"
     private static let sshPort = 22
+
+    private static var sshUsername: String {
+        UserDefaults.standard.string(forKey: sshUsernameKey)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
 
     /// Auto-reconnect schedule (seconds) for unexpected drops. Caps at 30 s so
     /// the app keeps trying for as long as the user leaves the tab open
@@ -28,6 +36,11 @@ final class TerminalViewModel {
     var publicKey: String = ""
     var apiKeyInput: String = ""
     var hasAPIKey: Bool = APIKeyManager.get() != nil
+    /// Set when `VMStarterService` raises `.rateLimited` — carries the
+    /// Cloud-Function-supplied deadline so the error overlay can render a
+    /// live countdown and gate the Retry button on the timer expiring.
+    /// Cleared on `connect()` so a retry doesn't keep showing stale state.
+    var rateLimitedRetryAt: Date?
 
     private let sshService = SSHService()
     private(set) weak var terminalView: TerminalView?
@@ -60,6 +73,7 @@ final class TerminalViewModel {
     func connect() {
         userInitiatedDisconnect = false
         reconnectAttempt = 0
+        rateLimitedRetryAt = nil
         reconnectTask?.cancel()
         reconnectTask = nil
         connectTask?.cancel()
@@ -69,7 +83,9 @@ final class TerminalViewModel {
     private func performConnect() async {
         state = .checkingKey
 
-        guard SSHKeyManager.hasKey(), APIKeyManager.get() != nil else {
+        guard SSHKeyManager.hasKey(),
+              APIKeyManager.get() != nil,
+              !Self.sshUsername.isEmpty else {
             state = .setupRequired
             return
         }
@@ -81,6 +97,14 @@ final class TerminalViewModel {
             vmResult = try await VMStarterService.startAndWaitForIP()
             try Task.checkCancellation()
         } catch is CancellationError {
+            return
+        } catch VMStarterService.VMStarterError.rateLimited(let retryAfter) {
+            // Stash a deadline so the overlay can render a countdown and
+            // disable Retry until the window elapses. Falls back to a 60s
+            // hold when the server didn't send Retry-After.
+            let delay = TimeInterval(retryAfter ?? 60)
+            rateLimitedRetryAt = Date().addingTimeInterval(delay)
+            state = .error(VMStarterService.VMStarterError.rateLimited(retryAfter: retryAfter).errorDescription ?? "Rate limited")
             return
         } catch {
             state = .error("VM start failed: \(error.localizedDescription)")

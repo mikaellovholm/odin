@@ -28,6 +28,11 @@ final class OdinMCPServer {
 
     private var listener: NWListener?
     private(set) var port: UInt16?
+    /// Per-launch shared secret. Loopback alone is not a trust boundary on
+    /// macOS — any user-level process can reach 127.0.0.1 — so every request
+    /// must carry `X-Odin-Auth: <token>`. The token is written into the
+    /// per-session `.mcp.json` so Claude Code includes it on every call.
+    private(set) var authToken: String?
 
     var mcpURL: String? {
         guard let port else { return nil }
@@ -38,6 +43,8 @@ final class OdinMCPServer {
 
     func start() throws {
         guard listener == nil else { return }
+
+        authToken = Self.generateAuthToken()
 
         let params = NWParameters.tcp
         params.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
@@ -58,6 +65,17 @@ final class OdinMCPServer {
         }
         listener.start(queue: .main)
         self.listener = listener
+    }
+
+    /// Cancel the loopback listener and forget the auth token. Called on app
+    /// quit so the ephemeral port can be released cleanly; calling start()
+    /// again would mint a fresh token, so any in-flight workers spawned by
+    /// the previous launch are correctly locked out.
+    func stop() {
+        listener?.cancel()
+        listener = nil
+        port = nil
+        authToken = nil
     }
 
     // MARK: - Connection handling
@@ -110,6 +128,12 @@ final class OdinMCPServer {
     private func process(request: HTTPRequestParser.Request, on connection: NWConnection) async {
         guard request.method == "POST", request.path == "/mcp" else {
             sendEmpty(on: connection, status: 404)
+            return
+        }
+        guard let expected = authToken,
+              let provided = request.headers["x-odin-auth"],
+              Self.constantTimeEqual(provided, expected) else {
+            sendEmpty(on: connection, status: 401)
             return
         }
         let raw: Any
@@ -231,9 +255,31 @@ final class OdinMCPServer {
         case 200: return "OK"
         case 202: return "Accepted"
         case 400: return "Bad Request"
+        case 401: return "Unauthorized"
         case 404: return "Not Found"
         default: return "OK"
         }
+    }
+
+    /// 32 bytes of CSPRNG output (Swift's `SystemRandomNumberGenerator` is
+    /// backed by arc4random on Apple platforms) rendered as 64 hex chars.
+    private static func generateAuthToken() -> String {
+        let bytes = (0..<32).map { _ in UInt8.random(in: 0...255) }
+        return bytes.map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Constant-time string comparison. Length mismatch is a fast-fail (the
+    /// length itself isn't secret), but equal-length comparisons OR every
+    /// byte to avoid early-exit timing leaks.
+    private static func constantTimeEqual(_ a: String, _ b: String) -> Bool {
+        let aBytes = Array(a.utf8)
+        let bBytes = Array(b.utf8)
+        guard aBytes.count == bBytes.count else { return false }
+        var diff: UInt8 = 0
+        for i in 0..<aBytes.count {
+            diff |= aBytes[i] ^ bBytes[i]
+        }
+        return diff == 0
     }
 }
 

@@ -6,7 +6,6 @@ struct TerminalRepresentable: UIViewRepresentable {
     var onTerminalViewCreated: (TerminalView) -> Void
     var onDataSend: (ArraySlice<UInt8>) -> Void
     var onSizeChanged: (Int, Int) -> Void
-    var onTitleChanged: ((String) -> Void)?
     var fontSize: CGFloat = 10
     var isConnected: Bool
     @Binding var keyboardDismissed: Bool
@@ -52,7 +51,7 @@ struct TerminalRepresentable: UIViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onDataSend: onDataSend, onSizeChanged: onSizeChanged, onTitleChanged: onTitleChanged)
+        Coordinator(onDataSend: onDataSend, onSizeChanged: onSizeChanged)
     }
 }
 
@@ -178,7 +177,6 @@ struct TerminalRepresentable: NSViewRepresentable {
     var onTerminalViewCreated: (TerminalView) -> Void
     var onDataSend: (ArraySlice<UInt8>) -> Void
     var onSizeChanged: (Int, Int) -> Void
-    var onTitleChanged: ((String) -> Void)?
     var fontSize: CGFloat = 12
     var isConnected: Bool
     @Binding var keyboardDismissed: Bool
@@ -220,7 +218,7 @@ struct TerminalRepresentable: NSViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onDataSend: onDataSend, onSizeChanged: onSizeChanged, onTitleChanged: onTitleChanged)
+        Coordinator(onDataSend: onDataSend, onSizeChanged: onSizeChanged)
     }
 }
 #endif
@@ -229,18 +227,15 @@ extension TerminalRepresentable {
     class Coordinator: NSObject, TerminalViewDelegate {
         let onDataSend: (ArraySlice<UInt8>) -> Void
         let onSizeChanged: (Int, Int) -> Void
-        let onTitleChanged: ((String) -> Void)?
         weak var terminalView: TerminalView?
         #if os(macOS)
         private var keyMonitor: Any?
         #endif
 
         init(onDataSend: @escaping (ArraySlice<UInt8>) -> Void,
-             onSizeChanged: @escaping (Int, Int) -> Void,
-             onTitleChanged: ((String) -> Void)? = nil) {
+             onSizeChanged: @escaping (Int, Int) -> Void) {
             self.onDataSend = onDataSend
             self.onSizeChanged = onSizeChanged
-            self.onTitleChanged = onTitleChanged
             super.init()
             #if os(macOS)
             installShiftReturnMonitor()
@@ -284,9 +279,7 @@ extension TerminalRepresentable {
             onSizeChanged(newCols, newRows)
         }
 
-        func setTerminalTitle(source: TerminalView, title: String) {
-            onTitleChanged?(title)
-        }
+        func setTerminalTitle(source: TerminalView, title: String) {}
         func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
         func scrolled(source: TerminalView, position: Double) {}
         func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {}

@@ -26,6 +26,20 @@ enum OdinSkillInstaller {
                 NSLog("[OdinSkills] failed to install \(skill.name): \(error)")
             }
         }
+        // Drop skills we used to ship but no longer do. Leaving them around
+        // would point Claude at a tool contract that no longer matches the
+        // MCP server (e.g. odin-spawn calling run_background_task without a
+        // review_id, which now errors).
+        for retired in retiredSkills {
+            let dir = base + "/" + retired
+            guard FileManager.default.fileExists(atPath: dir) else { continue }
+            do {
+                try FileManager.default.removeItem(atPath: dir)
+                NSLog("[OdinSkills] removed retired \(retired)")
+            } catch {
+                NSLog("[OdinSkills] failed to remove retired \(retired): \(error)")
+            }
+        }
     }
 
     private struct Skill {
@@ -34,133 +48,23 @@ enum OdinSkillInstaller {
     }
 
     private static let skills: [Skill] = [
-        Skill(name: "odin-spawn", body: odinSpawn),
-        Skill(name: "odin-orchestrate", body: odinOrchestrate),
         Skill(name: "odin-review", body: odinReview),
     ]
 
-    private static let odinSpawn = #"""
-    ---
-    name: odin-spawn
-    description: Spawn a headless Claude Code worker via Odin's local MCP for a scoped background task, then come back to it later — do not block waiting for the result. Use when a question needs file scans, large repo reads, exploratory grep, or any deep work that would bloat the current session's context. Triggers on phrases like "delegate", "in the background", "fire and forget", "spawn a worker", "use odin to".
-    ---
+    /// Names of skills Odin used to install but no longer ships. Removed
+    /// from `~/.claude/skills/` on launch so stale SKILL.md files can't
+    /// teach Claude to call tools that have since changed contract.
+    private static let retiredSkills: [String] = [
+        "odin-spawn",
+        "odin-orchestrate",
+    ]
 
-    # Spawn a background Claude worker — fire and forget
-
-    The Odin MCP exposes these tools backed by Odin's in-process server:
-
-    - `mcp__odin__run_background_task(prompt, cwd?, model?)` — **returns immediately** with `{task_id, status: "running"}`. The worker keeps running. Pass `model` (e.g. `"claude-sonnet-4-6"`, `"claude-opus-4-7"`, `"claude-haiku-4-5"`) to pin a specific model; omit to use the host CLI default.
-    - `mcp__odin__get_task_status(task_id)` — non-blocking snapshot. Call this when you want to peek.
-    - `mcp__odin__await_task(task_id, timeout_seconds?)` — blocks the parent tool call until the worker exits. **Avoid unless you really need the answer in the same assistant turn.** Blocking here means you've turned a "background task" into a synchronous wait.
-    - `mcp__odin__stop_task(task_id)` — send SIGTERM to a single worker. Use when the user asks to cancel a specific task. Returns immediately; the worker may take a moment to actually exit. Final state surfaces as `failed` with `"cancelled by user"`.
-
-    Each call to `run_background_task` spawns a fresh `claude -p` subprocess with `--dangerously-skip-permissions`. It has no UI and lives only inside Odin.
-
-    ## Recommended flow (pull pattern)
-
-    1. Call `run_background_task` with a tight prompt and the right `cwd`. Capture the `task_id`.
-    2. **Tell the user the task is running and return control.** Do not call `await_task`.
-    3. Continue chatting. The user will steer the conversation.
-    4. When the user asks, or when it makes sense to check (e.g. they say "is it done?"), call `get_task_status(task_id)`. If `status` is `"completed"`, use the `result`. If still `"running"`, say so.
-
-    ### Bonus: auto-notification on next turn
-    Odin also installs a `UserPromptSubmit` hook that injects a one-line notification into your context the next time the user sends a message, *if* a background task you spawned has completed since the last turn. So even without explicit polling, you'll learn about completion at the earliest natural moment — and can mention it to the user.
-
-    ## When `await_task` IS appropriate
-
-    Block only when:
-    - The user's current request explicitly depends on the result ("tell me the count, then suggest next steps").
-    - The work is genuinely short (a few seconds) and the result is small.
-
-    Otherwise: spawn, tell the user, return.
-
-    ## When to use this skill at all
-
-    Spawn a worker when:
-    - The task involves reading or scanning many files and you only need the *finding*, not the raw contents.
-    - The task is repetitive (count, list, audit) and the result is a small value or summary.
-    - The task can be expressed in one sentence and answered in a few words.
-
-    Don't spawn a worker when:
-    - The task is interactive — needs follow-up turns or user input.
-    - The task is small enough to do inline.
-    - The task requires writing to files outside the worker's brief.
-
-    ## Example
-
-    ```
-    run_background_task(
-      prompt: "Count the number of .swift files under the current directory recursively. Reply with just the number, nothing else.",
-      cwd: "/Users/me/projects/odin--background/Odin"
-    )
-    → { "task_id": "t-a1b2c3d4", "status": "running", "cwd": "..." }
-
-    # Tell the user: "Started t-a1b2c3d4 — I'll let you know when it finishes."
-    # Continue chatting. Either the auto-notification surfaces the result on a future
-    # turn, or you can call get_task_status when asked.
-
-    get_task_status(task_id: "t-a1b2c3d4")
-    → { "task_id": "t-a1b2c3d4", "status": "completed", "result": "47" }
-    ```
-
-    ## Gotchas
-
-    - Workers run with `--dangerously-skip-permissions`. Scope the prompt so the worker can't do damage.
-    - Workers don't share your context. Restate every fact they need in the prompt.
-    - On failure, `status` becomes `"failed"` and the error is in `error`. Read it before retrying.
-    """#
-
-    private static let odinOrchestrate = #"""
-    ---
-    name: odin-orchestrate
-    description: Fan out parallel background Claude workers via Odin's local MCP and join the results. Use when multiple independent investigations can run concurrently — auditing several modules at once, asking the same question across multiple directories, or any N-way map-then-synthesize problem. Triggers on phrases like "in parallel", "fan out", "for each ... run a worker", "multiple background tasks", "orchestrate".
-    ---
-
-    # Orchestrate parallel background workers
-
-    When N independent tasks can each be answered by a one-shot Claude worker, spawn them all, then either await them all (if you need the joined result this turn) or check status on a future turn (preferred — see odin-spawn for the fire-and-forget pattern).
-
-    ## When to use
-
-    - N>1 independent investigations of similar shape ("look at each of these N folders and report X").
-    - Cross-cutting audits where each worker reports one small structured fact.
-    - Bulk file-shape work where each worker's output is tiny.
-
-    Don't orchestrate when:
-    - Tasks have dependencies — chain them sequentially instead.
-    - The combined work fits in one worker — just spawn one.
-
-    ## How to use
-
-    1. Build the list of (label, prompt, cwd) tuples up front.
-    2. Issue all `run_background_task` calls in a single assistant turn as parallel tool calls.
-    3. Collect the returned `task_id`s.
-    4. **Default: return control to the user.** Mention you've fanned out N workers. Check status on a later turn — or let the auto-notification hook surface results when they're ready.
-    5. **Only if the user needs the joined result right now:** issue all `await_task` calls in a single assistant turn as parallel tool calls, then synthesize.
-
-    ## Example
-
-    ```
-    # Step 2: parallel spawns
-    run_background_task(prompt: "Count Swift files. Reply with just the number.", cwd: "/path/A") → t-1
-    run_background_task(prompt: "Count Swift files. Reply with just the number.", cwd: "/path/B") → t-2
-    run_background_task(prompt: "Count Swift files. Reply with just the number.", cwd: "/path/C") → t-3
-
-    # Default: tell the user "fanned out across A/B/C, will report when ready"
-
-    # Or, if needed this turn: parallel awaits
-    await_task(t-1) → "12"
-    await_task(t-2) → "47"
-    await_task(t-3) → "9"
-    # Synthesize: "A=12, B=47, C=9 — 68 Swift files total."
-    ```
-
-    ## Gotchas
-
-    - Each worker is a full Claude Code session. Twenty workers spend twenty contexts — cap fan-out at 3-5.
-    - Workers don't see each other. If B needs A's output, await A first and pass the value into B's prompt.
-    - If one worker fails, the rest still complete. Inspect each result before synthesizing.
-    """#
+    // odin-spawn and odin-orchestrate bodies were removed here — those skills
+    // are retired (deleted from disk on launch via `retiredSkills`). The old
+    // bodies referenced `--dangerously-skip-permissions`, which the P0 hardening
+    // pass removed from every worker spawn path. Keeping them as dead source
+    // would contradict the "no --dangerously-skip-permissions anywhere"
+    // constraint enforced by review.md.
 
     private static let odinReview = #"""
     ---
@@ -294,7 +198,7 @@ enum OdinSkillInstaller {
     - **Always call `start_review_run` first.** Without a `review_id`, workers can't call `submit_finding` and findings won't appear in the panel.
     - **Workers don't see CLAUDE.md.** If review needs project conventions, paste the relevant section into the prompt.
     - **Diff size.** If >2k lines, narrow scope or split by directory and run one fan-out per directory.
-    - **Workers run with `--dangerously-skip-permissions` AND have MCP access scoped to this review.** The prompt forbids file edits — don't loosen it. The MCP scoping means a reviewer can only submit findings to its own review run, not anyone else's.
+    - **Workers run with a scoped tool allow-list — Read, Grep, Glob, Bash, plus mcp__odin__submit_finding and mcp__odin__complete_review_worker.** Edit/Write are not allowed, so a reviewer can't mutate the worktree even if its prompt is jailbroken. The MCP scoping means a reviewer can only submit findings to its own review run, not anyone else's.
     - **One worker per concern.** Cross-file issues get lost when reviewers only see one file.
     - **Don't collate or present findings in chat.** The panel does that. Repeating findings in chat is noise.
     """#

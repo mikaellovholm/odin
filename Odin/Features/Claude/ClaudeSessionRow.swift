@@ -32,6 +32,7 @@ struct ClaudeSessionRow: View {
         }
         .buttonStyle(.borderless)
         .help("Remove session")
+        .accessibilityLabel("Remove session")
     }
 
     @ViewBuilder
