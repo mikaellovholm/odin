@@ -70,7 +70,7 @@ struct ClaudeSessionRow: View {
         case compacting         // PreCompact fired, PostCompact has not → orange, pulsing
         case done               // finished a turn but not yet acknowledged → yellow, stable
         case awaitingInput      // Notification hook / heartbeat-promoted stuck prompt → green
-        case awaitingPermission // PermissionRequest hook → cyan, highest urgency
+        case awaitingPermission // PermissionRequest hook → green, highest urgency
     }
 
     private var status: SessionStatus {
@@ -94,8 +94,7 @@ struct ClaudeSessionRow: View {
         case .idle: return Color.gray.opacity(0.5)
         case .processing, .done: return .yellow
         case .compacting: return .orange
-        case .awaitingInput: return .green
-        case .awaitingPermission: return .cyan
+        case .awaitingInput, .awaitingPermission: return .green
         }
     }
 
