@@ -1,5 +1,6 @@
 const functions = require("@google-cloud/functions-framework");
 const { InstancesClient } = require("@google-cloud/compute");
+const crypto = require("crypto");
 
 const PROJECT = "claude-dev-ml-01";
 const ZONE = "europe-north1-a";
@@ -15,9 +16,23 @@ const startTimestamps = [];
 const compute = new InstancesClient();
 
 functions.http("claude-dev-starter", async (req, res) => {
-  // API key validation
+  // Fail closed if the deploy is missing the API_KEY env var — the previous
+  // `if (apiKey && …)` form silently allowed unauthenticated requests.
   const apiKey = process.env.API_KEY;
-  if (apiKey && req.headers["x-api-key"] !== apiKey) {
+  if (!apiKey) {
+    console.error("API_KEY env var is not set; refusing requests");
+    return res.status(500).json({ error: "server_misconfigured" });
+  }
+  const provided = req.headers["x-api-key"];
+  if (typeof provided !== "string") {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  const providedBuf = Buffer.from(provided, "utf8");
+  const expectedBuf = Buffer.from(apiKey, "utf8");
+  if (
+    providedBuf.length !== expectedBuf.length ||
+    !crypto.timingSafeEqual(providedBuf, expectedBuf)
+  ) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
@@ -80,7 +95,10 @@ functions.http("claude-dev-starter", async (req, res) => {
 
     res.json({ status, ip, hostKey });
   } catch (err) {
+    // Log the upstream error for diagnostics, but don't echo it to the
+    // caller — GCP errors can include project IDs, hostnames, and policy
+    // details that don't need to leak.
     console.error("Error:", err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "internal_error" });
   }
 });

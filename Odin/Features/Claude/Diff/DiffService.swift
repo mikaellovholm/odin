@@ -23,20 +23,20 @@ enum DiffService {
     /// in from `--numstat` (numstat reports `-\t-` for binary).
     static func changedFiles(in cwd: String) async -> [ChangedFile] {
         // Use --porcelain=v1 -z for unambiguous parsing (NUL-separated, no quoting).
-        let statusOut = await runGit(
+        let statusOut = await GitCommand.run(
             ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
             cwd: cwd
         )
         guard statusOut.exitCode == 0 else { return [] }
-        let entries = parsePorcelainV1Z(statusOut.output)
+        let entries = parsePorcelainV1Z(statusOut.combined)
         guard !entries.isEmpty else { return [] }
 
         // Get +/- counts for tracked, non-deleted entries in one shot.
-        let numstatOut = await runGit(
+        let numstatOut = await GitCommand.run(
             ["diff", "--numstat", "-M", "HEAD"],
             cwd: cwd
         )
-        let numstats = parseNumstat(numstatOut.output)
+        let numstats = parseNumstat(numstatOut.combined)
 
         var result: [ChangedFile] = []
         result.reserveCapacity(entries.count)
@@ -73,25 +73,25 @@ enum DiffService {
         case .untracked:
             // Compare /dev/null to the working-tree path to render the whole
             // file as added lines. --no-index exits 1 on differences (expected).
-            let r = await runGit(
+            let r = await GitCommand.run(
                 ["diff", "--no-color", "--no-index", "--", "/dev/null", file.path],
                 cwd: cwd
             )
-            return r.output
+            return r.combined
         case .deleted, .modified, .added, .renamed, .copied, .typeChanged, .unmerged:
             // -M turns on rename detection so the diff header matches the
             // status entry. The path arg uses the new name (git resolves the
             // rename internally).
-            let r = await runGit(
+            let r = await GitCommand.run(
                 ["diff", "--no-color", "-M", "HEAD", "--", file.path],
                 cwd: cwd
             )
-            return r.output
+            return r.combined
         }
     }
 
     static func isGitRepo(_ cwd: String) async -> Bool {
-        let r = await runGit(["rev-parse", "--git-dir"], cwd: cwd)
+        let r = await GitCommand.run(["rev-parse", "--git-dir"], cwd: cwd)
         return r.exitCode == 0
     }
 
@@ -222,40 +222,5 @@ enum DiffService {
         return (lines, false)
     }
 
-    // MARK: - Process
-
-    private struct GitResult {
-        let exitCode: Int32
-        let output: String
-    }
-
-    private static func runGit(_ args: [String], cwd: String) async -> GitResult {
-        await withCheckedContinuation { (cont: CheckedContinuation<GitResult, Never>) in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let proc = Process()
-                proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-                proc.arguments = ["git"] + args
-                proc.currentDirectoryURL = URL(fileURLWithPath: cwd)
-                let stdout = Pipe()
-                let stderr = Pipe()
-                proc.standardOutput = stdout
-                proc.standardError = stderr
-                do {
-                    try proc.run()
-                    let outData = stdout.fileHandleForReading.readDataToEndOfFile()
-                    let errData = stderr.fileHandleForReading.readDataToEndOfFile()
-                    proc.waitUntilExit()
-                    let combined = (String(data: outData, encoding: .utf8) ?? "")
-                        + (String(data: errData, encoding: .utf8) ?? "")
-                    cont.resume(returning: GitResult(
-                        exitCode: proc.terminationStatus,
-                        output: combined
-                    ))
-                } catch {
-                    cont.resume(returning: GitResult(exitCode: -1, output: "\(error)"))
-                }
-            }
-        }
-    }
 }
 #endif

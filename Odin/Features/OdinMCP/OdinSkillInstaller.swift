@@ -26,6 +26,20 @@ enum OdinSkillInstaller {
                 NSLog("[OdinSkills] failed to install \(skill.name): \(error)")
             }
         }
+        // Drop skills we used to ship but no longer do. Leaving them around
+        // would point Claude at a tool contract that no longer matches the
+        // MCP server (e.g. odin-spawn calling run_background_task without a
+        // review_id, which now errors).
+        for retired in retiredSkills {
+            let dir = base + "/" + retired
+            guard FileManager.default.fileExists(atPath: dir) else { continue }
+            do {
+                try FileManager.default.removeItem(atPath: dir)
+                NSLog("[OdinSkills] removed retired \(retired)")
+            } catch {
+                NSLog("[OdinSkills] failed to remove retired \(retired): \(error)")
+            }
+        }
     }
 
     private struct Skill {
@@ -34,9 +48,15 @@ enum OdinSkillInstaller {
     }
 
     private static let skills: [Skill] = [
-        Skill(name: "odin-spawn", body: odinSpawn),
-        Skill(name: "odin-orchestrate", body: odinOrchestrate),
         Skill(name: "odin-review", body: odinReview),
+    ]
+
+    /// Names of skills Odin used to install but no longer ships. Removed
+    /// from `~/.claude/skills/` on launch so stale SKILL.md files can't
+    /// teach Claude to call tools that have since changed contract.
+    private static let retiredSkills: [String] = [
+        "odin-spawn",
+        "odin-orchestrate",
     ]
 
     private static let odinSpawn = #"""
@@ -294,7 +314,7 @@ enum OdinSkillInstaller {
     - **Always call `start_review_run` first.** Without a `review_id`, workers can't call `submit_finding` and findings won't appear in the panel.
     - **Workers don't see CLAUDE.md.** If review needs project conventions, paste the relevant section into the prompt.
     - **Diff size.** If >2k lines, narrow scope or split by directory and run one fan-out per directory.
-    - **Workers run with `--dangerously-skip-permissions` AND have MCP access scoped to this review.** The prompt forbids file edits — don't loosen it. The MCP scoping means a reviewer can only submit findings to its own review run, not anyone else's.
+    - **Workers run with a scoped tool allow-list — Read, Grep, Glob, Bash, plus mcp__odin__submit_finding and mcp__odin__complete_review_worker.** Edit/Write are not allowed, so a reviewer can't mutate the worktree even if its prompt is jailbroken. The MCP scoping means a reviewer can only submit findings to its own review run, not anyone else's.
     - **One worker per concern.** Cross-file issues get lost when reviewers only see one file.
     - **Don't collate or present findings in chat.** The panel does that. Repeating findings in chat is noise.
     """#

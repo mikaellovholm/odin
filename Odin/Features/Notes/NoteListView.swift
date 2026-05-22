@@ -118,6 +118,7 @@ struct NoteListView: View {
             }
             .buttonStyle(.borderless)
             .help("New note (⌘N)")
+            .accessibilityLabel("New note")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -138,6 +139,7 @@ struct NoteListView: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.borderless)
+                .accessibilityLabel("Clear search")
             }
         }
         .padding(.horizontal, 12)
@@ -328,9 +330,6 @@ struct NoteListView: View {
                 ContentUnavailableView("Select a Note", systemImage: "note.text")
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .odinCreateNewNote)) { _ in
-            createNote()
-        }
     }
     #endif
 
@@ -411,6 +410,7 @@ private struct NoteRow: View {
         }
         .buttonStyle(.borderless)
         .help("Delete note")
+        .accessibilityLabel("Delete note")
     }
     #endif
 

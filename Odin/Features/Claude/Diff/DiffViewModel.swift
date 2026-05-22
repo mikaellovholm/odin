@@ -88,14 +88,20 @@ final class DiffViewModel {
                 // Same file — reload its diff in case content changed.
                 if let f = newFiles.first(where: { $0.id == id }) {
                     await loadDiff(for: f)
+                    guard gen == refreshGeneration else { return }
                 }
             } else if let first = newFiles.first {
                 selectedFileID = first.id
                 await loadDiff(for: first)
+                guard gen == refreshGeneration else { return }
             } else {
                 selectedFileID = nil
                 selectedDiff = nil
             }
+            // Final re-check before the loading flag drops — a fresh
+            // refresh that arrived while loadDiff was awaiting should keep
+            // the spinner visible until its own work completes.
+            guard gen == refreshGeneration else { return }
             isLoading = false
         }
     }

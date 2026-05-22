@@ -12,9 +12,6 @@ struct TodoListView: View {
     @State private var selectedTodo: TodoItem?
     @FocusState private var listFocused: Bool
     #endif
-    #if os(iOS)
-    @State private var showingSettings = false
-    #endif
 
     private var incompleteTodos: [TodoItem] {
         todos.filter { !$0.isCompleted }
@@ -109,32 +106,12 @@ struct TodoListView: View {
                     ToolbarItem(placement: .automatic) {
                         CloudKitSyncStatusView()
                     }
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button {
-                            showingSettings = true
-                        } label: {
-                            Image(systemName: "gear")
-                        }
-                    }
                 }
                 .sheet(isPresented: $showingAddSheet) {
                     TodoDetailView()
                 }
                 .sheet(item: $editingTodo) { todo in
                     TodoDetailView(existingTodo: todo)
-                }
-                .onReceive(NotificationCenter.default.publisher(for: .odinCreateNewTodo)) { _ in
-                    showingAddSheet = true
-                }
-                .sheet(isPresented: $showingSettings) {
-                    NavigationStack {
-                        SettingsView()
-                            .toolbar {
-                                ToolbarItem(placement: .confirmationAction) {
-                                    Button("Done") { showingSettings = false }
-                                }
-                            }
-                    }
                 }
                 .overlay {
                     if todos.isEmpty {

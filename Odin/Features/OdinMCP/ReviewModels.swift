@@ -149,4 +149,40 @@ struct ReviewWorkerContext: Equatable {
     let reviewId: String
     let role: Role
 }
+
+// MARK: - Finding predicates
+
+extension ReviewFinding {
+    /// "Fix worker dispatch makes sense for this finding": it's marked
+    /// fixable AND is in a state we'd actually act on (untouched / previously
+    /// failed / previously skipped). The single source of truth shared by the
+    /// view model's bulk dispatch path, the location-card Fix button, and the
+    /// bulk-action bar's counts.
+    var isDispatchable: Bool {
+        guard fixable else { return false }
+        return isUnfixed
+    }
+
+    /// Unfixed regardless of whether the finding is auto-fixable. Used by the
+    /// bulk action bar to show "N auto-fixable + M manual" instead of silently
+    /// dropping non-fixable findings from the count.
+    var isUnfixedAny: Bool {
+        isUnfixed
+    }
+
+    var isUnfixedBlocker: Bool {
+        severity == .blocker && isDispatchable
+    }
+
+    var isUnfixedFixable: Bool {
+        isDispatchable
+    }
+
+    private var isUnfixed: Bool {
+        switch fixState {
+        case .none, .failed, .skipped: return true
+        case .queued, .running, .applied: return false
+        }
+    }
+}
 #endif

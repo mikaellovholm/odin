@@ -4,6 +4,8 @@ import SwiftUI
 
 struct ClaudeSessionListView: View {
     @Environment(ClaudeSessionStore.self) private var store
+    @State private var diagnostics = OdinDiagnostics.shared
+    @State private var diagnosticsExpanded = false
 
     var body: some View {
         HSplitView {
@@ -22,18 +24,20 @@ struct ClaudeSessionListView: View {
     private var keyboardShortcuts: some View {
         ZStack {
             ForEach(Array(store.sessions.prefix(9).enumerated()), id: \.element.id) { index, session in
-                Button("") { store.select(session) }
-                    .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+                InvisibleShortcut(KeyEquivalent(Character("\(index + 1)"))) {
+                    store.select(session)
+                }
             }
         }
-        .frame(width: 0, height: 0)
-        .opacity(0)
-        .allowsHitTesting(false)
+        .invisibleShortcutsContainer()
     }
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
+            if diagnostics.hasFailure {
+                diagnosticsBanner
+            }
             Divider()
             if store.sessions.isEmpty {
                 emptySidebar
@@ -49,6 +53,47 @@ struct ClaudeSessionListView: View {
         // header and shortcut-hints regions. `windowBackgroundColor` matches
         // the rest of the macOS chrome and is fully opaque.
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    /// Inline failure banner — shown only when something at boot didn't come
+    /// up cleanly. Tap to expand the list of failed subsystems; matches the
+    /// shape of the Settings → Diagnostics section so users see the same
+    /// summary in both places.
+    private var diagnosticsBanner: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                diagnosticsExpanded.toggle()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text("Odin partially online")
+                        .font(.caption.weight(.semibold))
+                    Spacer()
+                    Image(systemName: diagnosticsExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .buttonStyle(.plain)
+            if diagnosticsExpanded {
+                ForEach(diagnostics.failureSummaries, id: \.label) { entry in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(entry.label + ":")
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                        Text(entry.message)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(3)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.10))
     }
 
     private var shortcutHints: some View {
@@ -91,6 +136,7 @@ struct ClaudeSessionListView: View {
             }
             .buttonStyle(.borderless)
             .help("New Claude session (⌘N)")
+            .accessibilityLabel("New Claude session")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)

@@ -8,9 +8,10 @@ final class BackgroundTaskRegistry {
 
     /// Soft cap on retained runners. Running tasks are never evicted; the
     /// oldest completed/failed tasks fall off when the registry grows past
-    /// this size. 50 is generous for human-driven use — the goal is just to
-    /// stop unbounded memory growth from a long-lived session.
-    private let maxRetained = 50
+    /// this size. 200 absorbs review-style burst usage — a single review run
+    /// can fan out 5 reviewers + a Phase-2 fixer per finding — without the
+    /// registry chewing memory across a long session.
+    private let maxRetained = 200
 
     private(set) var tasks: [String: BackgroundClaudeRunner] = [:]
 
@@ -82,6 +83,13 @@ final class BackgroundTaskRegistry {
         let completed = tasks.values
             .filter { $0.state != .running }
             .sorted { $0.createdAt < $1.createdAt }
+        guard !completed.isEmpty else {
+            // Every retained runner is still running — there is nothing
+            // safe to evict. Log so a stuck workload is visible in
+            // Console.app; the next finish() call will re-trigger prune.
+            NSLog("[OdinMCP] task registry at \(tasks.count) entries, all running — cannot prune")
+            return
+        }
         let overflow = tasks.count - maxRetained
         for runner in completed.prefix(overflow) {
             tasks.removeValue(forKey: runner.id)

@@ -5,6 +5,9 @@ enum AppTab: Hashable {
     case claude
     #endif
     case remote, notes, todos
+    #if os(iOS)
+    case settings
+    #endif
 }
 
 struct ContentView: View {
@@ -46,6 +49,11 @@ struct ContentView: View {
             }
             Tab("Todos", systemImage: "checklist", value: AppTab.todos) {
                 TodoListView()
+            }
+            Tab("Settings", systemImage: "gear", value: AppTab.settings) {
+                NavigationStack {
+                    SettingsView()
+                }
             }
         }
     }
@@ -114,6 +122,7 @@ private struct MacTabBar: View {
             }
             .buttonStyle(.plain)
             .help("About Odin")
+            .accessibilityLabel("About Odin")
         }
     }
 }

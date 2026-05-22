@@ -16,7 +16,7 @@ final class ShellTerminalViewModel {
     var workingDirectory: String = NSHomeDirectory()
 
     private var process: LocalProcess?
-    private var bridge: ShellProcessBridge?
+    private var bridge: LocalProcessClosureDelegate?
     private(set) weak var terminalView: TerminalView?
 
     /// Monotonically bumped on every `start()`. Each launch captures its token
@@ -40,7 +40,7 @@ final class ShellTerminalViewModel {
         currentLaunchToken &+= 1
         let launchToken = currentLaunchToken
 
-        let bridge = ShellProcessBridge(
+        let bridge = LocalProcessClosureDelegate(
             onData: { [weak self] slice in
                 self?.terminalView?.feed(byteArray: slice)
             },
@@ -118,30 +118,4 @@ final class ShellTerminalViewModel {
     }
 }
 
-@MainActor
-private final class ShellProcessBridge: LocalProcessDelegate, @unchecked Sendable {
-    let onData: (ArraySlice<UInt8>) -> Void
-    let onTerminated: (Int32?) -> Void
-    let onGetWindowSize: () -> winsize
-
-    init(onData: @escaping (ArraySlice<UInt8>) -> Void,
-         onTerminated: @escaping (Int32?) -> Void,
-         onGetWindowSize: @escaping () -> winsize) {
-        self.onData = onData
-        self.onTerminated = onTerminated
-        self.onGetWindowSize = onGetWindowSize
-    }
-
-    nonisolated func processTerminated(_ source: LocalProcess, exitCode: Int32?) {
-        MainActor.assumeIsolated { self.onTerminated(exitCode) }
-    }
-
-    nonisolated func dataReceived(slice: ArraySlice<UInt8>) {
-        MainActor.assumeIsolated { self.onData(slice) }
-    }
-
-    nonisolated func getWindowSize() -> winsize {
-        MainActor.assumeIsolated { self.onGetWindowSize() }
-    }
-}
 #endif

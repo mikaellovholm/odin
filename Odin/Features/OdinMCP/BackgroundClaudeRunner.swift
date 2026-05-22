@@ -50,8 +50,11 @@ final class BackgroundClaudeRunner {
     /// state reads as "cancelled by user" instead of a bare exit-code message.
     private(set) var wasCancelled: Bool = false
     @ObservationIgnored private var process: Process?
-    @ObservationIgnored private var stdoutBuffer = Data()
-    @ObservationIgnored private var stderrBuffer = Data()
+    /// Lock-protected stdout/stderr buffers, drained continuously by
+    /// `readabilityHandler` so the child can't deadlock on a full pipe.
+    /// Snapshotted in `finish` for state assembly. See `PipeBuffers` for the
+    /// 256 KB cap and truncation marker.
+    @ObservationIgnored private let pipeBuffers = PipeBuffers(cap: 256 * 1024)
     /// Per-worker `.mcp.json` in $TMPDIR. Written in `start` when `reviewContext`
     /// is set, deleted in `finish`.
     @ObservationIgnored private var mcpConfigPath: String?
@@ -76,9 +79,13 @@ final class BackgroundClaudeRunner {
     func start(claudePath: String) throws {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: claudePath)
+        // No `--dangerously-skip-permissions`. Each worker gets a scoped
+        // `--allowed-tools` list matched to its role; tools outside the list
+        // fail closed in headless `-p` mode rather than prompting (which would
+        // hang the worker anyway).
         var args = [
             "-p", prompt,
-            "--dangerously-skip-permissions",
+            "--allowed-tools", Self.allowedTools(for: reviewContext),
         ]
         if let model, !model.isEmpty {
             args.append(contentsOf: ["--model", model])
@@ -109,27 +116,49 @@ final class BackgroundClaudeRunner {
         p.standardError = errPipe
         p.standardInput = FileHandle.nullDevice
 
-        // Collect all output in the termination handler rather than using
-        // readabilityHandler callbacks. Mixing the two creates an ordering race:
-        // readabilityHandler Tasks dispatched to MainActor can execute *after*
-        // the terminationHandler Task (and therefore after finish()), leaving
-        // stdoutBuffer/stderrBuffer incomplete when the result is captured.
-        //
-        // Since the process has already exited when terminationHandler fires,
-        // both write-ends are closed and readDataToEndOfFile() returns
-        // immediately with all buffered output — no blocking occurs.
-        //
-        // Note: macOS pipe buffers are ~64 KB. Workers producing more output
-        // than that may stall; keep spawned prompts concise.
-        p.terminationHandler = { [weak self] proc in
-            let output = outPipe.fileHandleForReading.readDataToEndOfFile()
-            let errput = errPipe.fileHandleForReading.readDataToEndOfFile()
+        // Stream stdout/stderr into `pipeBuffers` as data arrives. macOS pipe
+        // buffers are ~64 KB; without continuous draining a chatty worker
+        // would block in `write(2)` and never exit, so `terminationHandler`
+        // would never fire. The buffer is NSLock-protected so the system
+        // FileHandle queue can write concurrently with the termination
+        // drain below.
+        let buffers = self.pipeBuffers
+        let outFh = outPipe.fileHandleForReading
+        let errFh = errPipe.fileHandleForReading
+        outFh.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            if chunk.isEmpty {
+                // EOF — clear the handler so the system stops scheduling
+                // empty wake-ups on this FD.
+                handle.readabilityHandler = nil
+                return
+            }
+            buffers.appendStdout(chunk)
+        }
+        errFh.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            if chunk.isEmpty {
+                handle.readabilityHandler = nil
+                return
+            }
+            buffers.appendStderr(chunk)
+        }
+
+        p.terminationHandler = { proc in
+            // Clear the handlers now so no further reads queue while we
+            // finalize the result on MainActor.
+            outFh.readabilityHandler = nil
+            errFh.readabilityHandler = nil
+            // Drain any bytes that landed between the last readability
+            // event and termination. The child has exited so both reads
+            // return immediately (EOF).
+            let trailingOut = outFh.readDataToEndOfFile()
+            if !trailingOut.isEmpty { buffers.appendStdout(trailingOut) }
+            let trailingErr = errFh.readDataToEndOfFile()
+            if !trailingErr.isEmpty { buffers.appendStderr(trailingErr) }
             let exitCode = proc.terminationStatus
             Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.stdoutBuffer = output
-                self.stderrBuffer = errput
-                self.finish(exitCode: exitCode)
+                self?.finish(exitCode: exitCode)
             }
         }
 
@@ -143,14 +172,13 @@ final class BackgroundClaudeRunner {
 
     private func finish(exitCode: Int32) {
         guard state == .running else { return }
-        let stdoutText = String(data: stdoutBuffer, encoding: .utf8) ?? ""
-        let stderrText = String(data: stderrBuffer, encoding: .utf8) ?? ""
-        // Release raw byte buffers and the Process reference now that we've
-        // extracted everything we need. Whatever the consumer wants lives in
-        // `state` from here on. Pipe FDs were already closed by
-        // readDataToEndOfFile in the termination handler.
-        stdoutBuffer = Data()
-        stderrBuffer = Data()
+        let (stdoutData, stderrData) = pipeBuffers.snapshotAndClear()
+        let stdoutText = String(data: stdoutData, encoding: .utf8) ?? ""
+        let stderrText = String(data: stderrData, encoding: .utf8) ?? ""
+        // Release the Process reference now that we've extracted everything
+        // we need. Whatever the consumer wants lives in `state` from here
+        // on. Pipe FDs were already drained + closed by the termination
+        // handler.
         process = nil
         if let path = mcpConfigPath {
             try? FileManager.default.removeItem(atPath: path)
@@ -212,6 +240,26 @@ final class BackgroundClaudeRunner {
         }
     }
 
+    /// Worker tool allow-list, scoped to the role. Modelled on attn's review
+    /// loop (which uses `Bash,Read,Write,Edit,Glob,Grep` for its agent SDK),
+    /// trimmed per role:
+    ///   - reviewer: read-only inspection + the two MCP tools it needs to
+    ///     report findings back to Odin.
+    ///   - fixer: read + write + Bash for git/test, plus submit_fix_result.
+    ///   - nil (Swift-level generic spawn — no MCP path reaches this): same
+    ///     read/write/Bash set as the fixer, no MCP tools (no `.mcp.json`).
+    private static func allowedTools(for context: ReviewWorkerContext?) -> String {
+        guard let context else {
+            return "Read,Grep,Glob,Edit,Write,Bash"
+        }
+        switch context.role {
+        case .reviewer:
+            return "Read,Grep,Glob,Bash,mcp__odin__submit_finding,mcp__odin__complete_review_worker"
+        case .fixer:
+            return "Read,Grep,Glob,Edit,Write,Bash,mcp__odin__submit_fix_result"
+        }
+    }
+
     /// Writes a per-worker `.mcp.json` to $TMPDIR with the headers OdinMCP
     /// reads to route review tool calls. Returns nil for non-review workers,
     /// when the parent session id is missing (we can't route without it), or
@@ -225,10 +273,12 @@ final class BackgroundClaudeRunner {
         guard let context = reviewContext else { return nil }
         guard let parentSessionId, !parentSessionId.isEmpty else { return nil }
         guard let url = OdinMCPServer.shared.mcpURL else { return nil }
+        guard let authToken = OdinMCPServer.shared.authToken else { return nil }
         var headers: [String: String] = [
             "X-Session-Id": parentSessionId,
             "X-Task-Id": taskId,
-            "X-Review-Id": context.reviewId
+            "X-Review-Id": context.reviewId,
+            "X-Odin-Auth": authToken
         ]
         switch context.role {
         case .reviewer(let concern):
@@ -291,7 +341,9 @@ final class BackgroundClaudeRunner {
         guard let sessionId = parentSessionId, !sessionId.isEmpty else { return }
         let dir = NSHomeDirectory() + "/.claude/odin-pending"
         let file = dir + "/\(sessionId).txt"
-        let snippet = String(prompt.prefix(120)).replacingOccurrences(of: "\n", with: " ")
+        let snippet = Self.sanitizeForWrapper(
+            String(prompt.prefix(120)).replacingOccurrences(of: "\n", with: " ")
+        )
         let body: String
         switch state {
         case .running:
@@ -302,7 +354,7 @@ final class BackgroundClaudeRunner {
             Task \(id) (prompt: "\(snippet)") completed.
 
             Result:
-            \(result)
+            \(Self.sanitizeForWrapper(Self.capForInjection(result)))
             </odin-background-notification>
 
             """
@@ -312,7 +364,7 @@ final class BackgroundClaudeRunner {
             Task \(id) (prompt: "\(snippet)") FAILED.
 
             Error:
-            \(error)
+            \(Self.sanitizeForWrapper(Self.capForInjection(error)))
             </odin-background-notification>
 
             """
@@ -342,6 +394,38 @@ final class BackgroundClaudeRunner {
         }
     }
 
+    /// Worker stdout/stderr is wrapped in <odin-background-notification>…
+    /// </odin-background-notification> and fed back into the parent Claude's
+    /// next turn. If the worker emits the closing tag (or a forged opening
+    /// tag), it can break out of the wrapper and inject instructions the
+    /// parent will trust. Neutralise both tags case-insensitively before
+    /// interpolation. The replacement keeps the brackets visible so a curious
+    /// reader can see what was stripped.
+    private static func sanitizeForWrapper(_ s: String) -> String {
+        s.replacingOccurrences(
+            of: "</odin-background-notification>",
+            with: "</odin-background-notification[stripped]>",
+            options: .caseInsensitive
+        )
+        .replacingOccurrences(
+            of: "<odin-background-notification>",
+            with: "<odin-background-notification[stripped]>",
+            options: .caseInsensitive
+        )
+    }
+
+    private static let injectionByteCap = 8192
+
+    /// Cap the size of worker output injected into the parent context. Long
+    /// outputs are appended with a [truncated] marker. Counted in UTF-8
+    /// bytes so a flood of multibyte characters can't smuggle past the cap.
+    private static func capForInjection(_ s: String) -> String {
+        let utf8 = Array(s.utf8)
+        guard utf8.count > injectionByteCap else { return s }
+        let head = String(decoding: utf8.prefix(injectionByteCap), as: UTF8.self)
+        return head + "\n[truncated — \(utf8.count - injectionByteCap) bytes omitted]"
+    }
+
     /// Poll until completion or timeout. Returns nil on timeout or Task cancellation, state otherwise.
     func awaitCompletion(timeout: TimeInterval?) async -> State? {
         let deadline = timeout.map { Date().addingTimeInterval($0) }
@@ -367,6 +451,71 @@ final class BackgroundClaudeRunner {
         wasCancelled = true
         p.terminate()
         return true
+    }
+}
+
+/// Lock-protected stdout/stderr buffers for a `BackgroundClaudeRunner`. The
+/// system schedules `FileHandle.readabilityHandler` on its own queue, so
+/// concurrent appends are the norm. `NSLock` rather than an actor because the
+/// caller is a `nonisolated` system closure — hopping to an actor for every
+/// 4 KB chunk would serialise (and stall) the pipe drain that exists to
+/// prevent the deadlock in the first place.
+private final class PipeBuffers: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stdoutData = Data()
+    private var stderrData = Data()
+    private var stdoutFull = false
+    private var stderrFull = false
+    private let cap: Int
+
+    init(cap: Int) { self.cap = cap }
+
+    func appendStdout(_ chunk: Data) {
+        lock.lock(); defer { lock.unlock() }
+        Self.appendUnlocked(chunk, into: &stdoutData, full: &stdoutFull, cap: cap)
+    }
+
+    func appendStderr(_ chunk: Data) {
+        lock.lock(); defer { lock.unlock() }
+        Self.appendUnlocked(chunk, into: &stderrData, full: &stderrFull, cap: cap)
+    }
+
+    /// Returns the buffered stdout/stderr (with a `[output truncated]` marker
+    /// appended if the cap was hit) and resets internal storage. Called once
+    /// per worker, from `finish`.
+    func snapshotAndClear() -> (stdout: Data, stderr: Data) {
+        lock.lock(); defer { lock.unlock() }
+        let out = Self.resolve(stdoutData, full: stdoutFull)
+        let err = Self.resolve(stderrData, full: stderrFull)
+        stdoutData = Data()
+        stderrData = Data()
+        stdoutFull = false
+        stderrFull = false
+        return (out, err)
+    }
+
+    private static func appendUnlocked(_ chunk: Data, into buffer: inout Data, full: inout Bool, cap: Int) {
+        if full { return }
+        let remaining = cap - buffer.count
+        if remaining <= 0 {
+            full = true
+            return
+        }
+        if chunk.count <= remaining {
+            buffer.append(chunk)
+        } else {
+            buffer.append(chunk.prefix(remaining))
+            full = true
+        }
+    }
+
+    private static func resolve(_ data: Data, full: Bool) -> Data {
+        guard full else { return data }
+        var copy = data
+        if let marker = "\n[output truncated]".data(using: .utf8) {
+            copy.append(marker)
+        }
+        return copy
     }
 }
 #endif
