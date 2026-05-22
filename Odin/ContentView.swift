@@ -94,6 +94,27 @@ private struct MacTabBar: View {
         .overlay(alignment: .bottom) {
             Divider().opacity(0.6)
         }
+        .overlay(alignment: .trailing) {
+            Button {
+                AboutWindowController.shared.show()
+            } label: {
+                Group {
+                    if let icon = NSImage(named: "AppIcon") ?? NSApp.applicationIconImage {
+                        Image(nsImage: icon)
+                            .resizable()
+                            .interpolation(.high)
+                    } else {
+                        Image(systemName: "info.circle")
+                    }
+                }
+                .frame(width: 36, height: 36)
+                .contentShape(Rectangle())
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            }
+            .buttonStyle(.plain)
+            .help("About Odin")
+        }
     }
 }
 
