@@ -71,6 +71,12 @@ struct OdinApp: App {
                             session.viewModel.terminate()
                             session.shellViewModel.terminate()
                         }
+                        // Also cancel every in-flight background worker so
+                        // review/fix tasks don't keep consuming API tokens
+                        // after the user has quit.
+                        for runner in BackgroundTaskRegistry.shared.all() {
+                            runner.cancel()
+                        }
                         OdinMCPServer.shared.stop()
                     }
                 #endif

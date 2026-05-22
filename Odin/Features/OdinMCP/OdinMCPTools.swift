@@ -658,7 +658,7 @@ enum OdinMCPTools {
         var dict: [String: Any] = [
             "task_id": runner.id,
             "cwd": runner.cwd,
-            "created_at": ISO8601DateFormatter().string(from: runner.createdAt)
+            "created_at": isoFormatter.string(from: runner.createdAt)
         ]
         switch runner.state {
         case .running:
