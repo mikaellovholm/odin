@@ -1,6 +1,19 @@
 import SwiftUI
 import SwiftTerm
 
+/// Scrollback (history) buffer size in lines, applied to every terminal in
+/// the app. SwiftTerm's default is 500, which fills up in seconds of busy
+/// output. Bumped to 10 000 — at ~120 cols × ~40 B/cell that's roughly
+/// 50 MB per terminal in the worst case, fine for the handful of panes we
+/// open at once. The alternate buffer (tmux / less / full-screen TUIs)
+/// has no scrollback regardless; this only affects the normal buffer.
+/// Re-applied in `sizeChanged` so a future SwiftTerm path that rebuilds
+/// `TerminalOptions` (the underlying `Terminal` is constructed inside
+/// `AppleTerminalView.setupOptions` with the default 500-line scrollback)
+/// can't silently drop us back to the default — also a cheap no-op when
+/// the value is already what we want.
+private let terminalScrollbackLines: Int = 10_000
+
 #if os(iOS)
 struct TerminalRepresentable: UIViewRepresentable {
     var onTerminalViewCreated: (TerminalView) -> Void
@@ -19,6 +32,15 @@ struct TerminalRepresentable: UIViewRepresentable {
     func makeUIView(context: Context) -> OdinTerminalView {
         let tv = OdinTerminalView(frame: .zero)
         tv.terminalDelegate = context.coordinator
+        // SwiftTerm defaults Option/Alt to Meta (sends `ESC + key`), which on
+        // Nordic/Swedish hardware-keyboard layouts swallows Option+2 (`@`),
+        // Option+Shift+7 (`\`), Option+7/8/9 (`|`/`[`/`]`), etc. Let the OS
+        // keyboard layout produce the actual character instead.
+        tv.optionAsMetaKey = false
+        // SwiftTerm constructs its `Terminal` inside `setupOptions` with the
+        // default 500-line scrollback. Bump it now so output produced before
+        // the first `sizeChanged` callback still lands in the bigger buffer.
+        tv.changeScrollback(terminalScrollbackLines)
         let bg = backgroundColorOverride ?? .black
         tv.nativeBackgroundColor = bg
         tv.nativeForegroundColor = useHomebrewTheme ? TerminalTheme.homebrewForeground : .white
@@ -190,6 +212,16 @@ struct TerminalRepresentable: NSViewRepresentable {
     func makeNSView(context: Context) -> TerminalView {
         let tv = TerminalView(frame: .zero)
         tv.terminalDelegate = context.coordinator
+        // SwiftTerm defaults Option to Meta (sends `ESC + key`), which on
+        // Nordic/Swedish layouts swallows Option+2 (`@`), Option+Shift+7 (`\`),
+        // Option+8/9 (`[`/`]`), Option+7 (`|`), and friends. Turn it off so
+        // the OS keyboard layout produces the actual character; users who
+        // want emacs-style Meta bindings can still get them via Esc-prefix.
+        tv.optionAsMetaKey = false
+        // SwiftTerm constructs its `Terminal` inside `setupOptions` with the
+        // default 500-line scrollback. Bump it now so output produced before
+        // the first `sizeChanged` callback still lands in the bigger buffer.
+        tv.changeScrollback(terminalScrollbackLines)
         tv.nativeBackgroundColor = backgroundColorOverride ?? .black
         tv.nativeForegroundColor = useHomebrewTheme ? TerminalTheme.homebrewForeground : .white
         if useHomebrewTheme {
@@ -276,6 +308,10 @@ extension TerminalRepresentable {
         }
 
         func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
+            // Use the view-level `changeScrollback` (not `Terminal.changeScrollback`)
+            // so SwiftTerm also refreshes its scroller thumb after the buffer
+            // grows. Idempotent — safe to call on every resize.
+            source.changeScrollback(terminalScrollbackLines)
             onSizeChanged(newCols, newRows)
         }
 
