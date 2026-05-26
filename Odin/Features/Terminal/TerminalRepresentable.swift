@@ -157,6 +157,33 @@ class OdinTerminalView: TerminalView, UIGestureRecognizerDelegate {
     @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
         onTapped?()
         becomeFirstResponder()
+        openLinkAtTapIfAny(gesture)
+    }
+
+    /// SwiftTerm's iOS tap → link path is gated behind a hover/Cmd-modifier
+    /// state that a plain finger tap can't produce, so the `requestOpenLink`
+    /// delegate never fires for either OSC 8 or implicit URLs on touch. Do the
+    /// lookup ourselves via the public `Terminal.link(at:mode:)` API. Cell
+    /// dimensions are approximated from `bounds / (cols,rows)` since
+    /// SwiftTerm's `cellDimension` is internal — off-by-one at the edges is
+    /// fine because URL matches span several cells.
+    private func openLinkAtTapIfAny(_ gesture: UITapGestureRecognizer) {
+        let term = getTerminal()
+        let cols = term.cols
+        let rows = term.rows
+        guard cols > 0, rows > 0, bounds.width > 0, bounds.height > 0 else { return }
+        let cellWidth = bounds.width / CGFloat(cols)
+        let cellHeight = bounds.height / CGFloat(rows)
+        guard cellWidth > 0, cellHeight > 0 else { return }
+        let point = gesture.location(in: self)
+        let col = Int(point.x / cellWidth)
+        let screenRow = Int((point.y - contentOffset.y) / cellHeight)
+        guard (0..<cols).contains(col), (0..<rows).contains(screenRow) else { return }
+        guard let link = term.link(at: .screen(Position(col: col, row: screenRow)),
+                                   mode: .explicitAndImplicit),
+              let url = TerminalLinkPolicy.safeURL(from: link)
+        else { return }
+        UIApplication.shared.open(url)
     }
 
     @objc private func handleWheelPan(_ gesture: UIPanGestureRecognizer) {
@@ -318,11 +345,35 @@ extension TerminalRepresentable {
         func setTerminalTitle(source: TerminalView, title: String) {}
         func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
         func scrolled(source: TerminalView, position: Double) {}
-        func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {}
+        func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
+            guard let url = TerminalLinkPolicy.safeURL(from: link) else { return }
+            #if os(macOS)
+            NSWorkspace.shared.open(url)
+            #else
+            UIApplication.shared.open(url)
+            #endif
+        }
         func bell(source: TerminalView) {}
         func clipboardCopy(source: TerminalView, content: Data) {}
         func iTermContent(source: TerminalView, content: ArraySlice<UInt8>) {}
         func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
+    }
+}
+
+/// Scheme allow-list for terminal hyperlinks. Restricts URL clicks to web +
+/// mail schemes so a malicious process can't emit an OSC 8 hyperlink (or an
+/// implicit URL like `file:///etc/passwd`) and surprise the user on click.
+enum TerminalLinkPolicy {
+    private static let allowedSchemes: Set<String> = ["http", "https", "mailto"]
+
+    /// Returns the parsed URL if `link` resolves to a URL whose scheme is in
+    /// the allow-list; otherwise nil.
+    static func safeURL(from link: String) -> URL? {
+        guard let url = URL(string: link),
+              let scheme = url.scheme?.lowercased(),
+              allowedSchemes.contains(scheme)
+        else { return nil }
+        return url
     }
 }
 
