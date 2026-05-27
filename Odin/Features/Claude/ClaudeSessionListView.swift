@@ -103,6 +103,7 @@ struct ClaudeSessionListView: View {
             shortcutRow(label: "Diff pane", shortcut: "⇧⌘D")
             shortcutRow(label: "Review pane", shortcut: "⇧⌘R")
             shortcutRow(label: "Terminal pane", shortcut: "⇧⌘T")
+            shortcutRow(label: "Open PR", shortcut: "⇧⌘G")
         }
         .font(.caption)
         .padding(.horizontal, 12)

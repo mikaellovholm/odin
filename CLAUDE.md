@@ -144,11 +144,12 @@ Lives in `Odin/Features/Claude/Review/`. Toggleable with `⇧⌘R`. The pane sur
 - ⇧⌘P — toggle the project side panel (per-session, in-memory).
 - ⇧⌘R — toggle the review side panel (per-session, in-memory).
 - ⇧⌘T — toggle the shell pane (per-session, in-memory).
+- ⇧⌘G — open the current Claude session's PR in the browser via `gh pr view --web` (`PRViewService`).
 - ⇧⌘M — toggle markdown preview in `FileViewerView`.
 - ⌥⌘M — toggle markdown preview in `NoteDetailView` (distinct from ⇧⌘M so the two surfaces don't collide when both are mounted).
 - Cmd+= / Cmd+- / Cmd+0 — terminal font zoom on macOS; pinch on iOS.
 
-`ContentView` appends the ⌃1…⌃4 tab-switch hints inline in the custom `MacTabBar` since `Tab` doesn't render menu shortcuts. The sidebar shortcut-hint footer in `ClaudeSessionListView` lists New session / Project pane / Diff pane / Review pane / Terminal pane via a small helper.
+`ContentView` appends the ⌃1…⌃4 tab-switch hints inline in the custom `MacTabBar` since `Tab` doesn't render menu shortcuts. The sidebar shortcut-hint footer in `ClaudeSessionListView` lists New session / Project pane / Diff pane / Review pane / Terminal pane / Open PR via a small helper.
 
 ### App-Level Glue
 
