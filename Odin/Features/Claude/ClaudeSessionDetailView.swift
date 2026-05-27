@@ -1,4 +1,5 @@
 #if os(macOS)
+import AppKit
 import SwiftUI
 
 struct ClaudeSessionDetailView: View {
@@ -33,8 +34,26 @@ struct ClaudeSessionDetailView: View {
             InvisibleShortcut("r", modifiers: [.command, .shift]) {
                 session.rightPaneMode = (session.rightPaneMode == .review) ? .hidden : .review
             }
+            InvisibleShortcut("g", modifiers: [.command, .shift]) {
+                openPR()
+            }
         }
         .invisibleShortcutsContainer()
+    }
+
+    private func openPR() {
+        let cwd = session.workingDirectory
+        Task { @MainActor in
+            do {
+                try await PRViewService.openInBrowser(workingDirectory: cwd)
+            } catch {
+                let alert = NSAlert()
+                alert.messageText = "Couldn't open PR"
+                alert.informativeText = (error as? LocalizedError)?.errorDescription ?? "\(error)"
+                alert.alertStyle = .warning
+                alert.runModal()
+            }
+        }
     }
 
     /// HSplitView columns from left to right (each conditional):
