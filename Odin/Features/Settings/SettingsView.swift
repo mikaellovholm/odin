@@ -5,6 +5,7 @@ struct SettingsView: View {
     @AppStorage(AppSettings.accentColorKey) private var accent: AppAccent = .blue
     @AppStorage(TerminalFontSettings.key) private var terminalFontSize: Double = Double(TerminalFontSettings.defaultSize)
     @AppStorage(TerminalViewModel.sshUsernameKey) private var sshUsername: String = ""
+    @AppStorage(TerminalViewModel.functionURLKey) private var functionURL: String = ""
     #if os(macOS)
     @AppStorage(ClaudePath.overrideKey) private var claudeBinaryOverride: String = ""
     #endif
@@ -72,6 +73,23 @@ struct SettingsView: View {
             }
 
             Section("Connection") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Cloud Function URL")
+                    TextField("https://…cloudfunctions.net/…", text: $functionURL)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(.caption, design: .monospaced))
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                        #endif
+                        .autocorrectionDisabled()
+                    if !functionURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        && TerminalViewModel.functionURL == nil {
+                        Text("Must be a valid https:// URL.")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
                 HStack {
                     Text("SSH username")
                     Spacer()

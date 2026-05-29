@@ -168,13 +168,14 @@ Source lives in `cloud-functions/claude-dev-starter/`. Node.js function deployed
 
 ```bash
 # Deploy (requires gcloud CLI authenticated)
-gcloud functions deploy claude-dev-starter --gen2 --region=europe-north1 \
-  --project=claude-dev-ml-01 --runtime=nodejs22 --trigger-http \
-  --allow-unauthenticated --set-env-vars=API_KEY=<key> \
+gcloud functions deploy claude-dev-starter --gen2 --region=<region> \
+  --project=<gcp-project-id> --runtime=nodejs22 --trigger-http \
+  --allow-unauthenticated \
+  --set-env-vars=API_KEY=<key>,GCP_PROJECT=<gcp-project-id>,GCP_ZONE=<zone>,GCP_INSTANCE=<vm-name> \
   --source=cloud-functions/claude-dev-starter --entry-point=claude-dev-starter
 ```
 
-The function validates an `X-API-Key` header (secret stored in `API_KEY` env var, compared via `crypto.timingSafeEqual` on equal-length buffers; deploys without the env var fail closed with HTTP 500 `server_misconfigured` rather than silently disabling auth), starts the VM if stopped, and returns `{status, ip, hostKey}`. Upstream GCP errors are logged server-side but the response body returns the generic `{error: "internal_error"}` so project IDs / hostnames / policy details don't leak. The `hostKey` is the full OpenSSH public key string (e.g. `ssh-ed25519 AAAA...`) read from VM instance metadata key `ssh-host-key-ed25519`. If the VM's host key ever changes (e.g. OS reinstall), update the metadata: `gcloud compute instances add-metadata claude-dev-vm --zone=europe-north1-a --project=claude-dev-ml-01 --metadata=ssh-host-key-ed25519=<base64-key>`
+The VM target (`GCP_PROJECT` / `GCP_ZONE` / `GCP_INSTANCE`) is read from env vars — the function source carries no deployment identifiers, and missing values fail closed with HTTP 500 `server_misconfigured`. The function validates an `X-API-Key` header (secret stored in `API_KEY` env var, compared via `crypto.timingSafeEqual` on equal-length buffers; deploys without the env var fail closed with HTTP 500 `server_misconfigured` rather than silently disabling auth), starts the VM if stopped, and returns `{status, ip, hostKey}`. Upstream GCP errors are logged server-side but the response body returns the generic `{error: "internal_error"}` so project IDs / hostnames / policy details don't leak. The `hostKey` is the full OpenSSH public key string (e.g. `ssh-ed25519 AAAA...`) read from VM instance metadata key `ssh-host-key-ed25519`. If the VM's host key ever changes (e.g. OS reinstall), update the metadata: `gcloud compute instances add-metadata <vm-name> --zone=<zone> --project=<gcp-project-id> --metadata=ssh-host-key-ed25519=<base64-key>`
 
 ### Security
 - **API key**: Stored in Keychain on device, validated by Cloud Function with a constant-time compare. Never committed to source code.

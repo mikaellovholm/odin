@@ -1,10 +1,6 @@
 import Foundation
 
 enum VMStarterService {
-    private static let endpoint = URL(
-        string: "https://europe-north1-claude-dev-ml-01.cloudfunctions.net/claude-dev-starter"
-    )!
-
     struct VMResponse: Decodable {
         let status: String
         let ip: String
@@ -40,6 +36,9 @@ enum VMStarterService {
         guard let apiKey = APIKeyManager.get() else {
             throw VMStarterError.missingAPIKey
         }
+        guard let endpoint = TerminalViewModel.functionURL else {
+            throw VMStarterError.missingFunctionURL
+        }
         var request = URLRequest(url: endpoint)
         request.httpMethod = "GET"
         request.timeoutInterval = 30
@@ -62,6 +61,7 @@ enum VMStarterService {
         case httpError(statusCode: Int)
         case timeout
         case missingAPIKey
+        case missingFunctionURL
         case missingHostKey
         case rateLimited(retryAfter: Int?)
 
@@ -73,6 +73,8 @@ enum VMStarterService {
                 return "VM did not become ready within 60 seconds"
             case .missingAPIKey:
                 return "API key not configured. Set it in Remote settings."
+            case .missingFunctionURL:
+                return "Cloud Function URL not configured. Set it in Remote settings."
             case .missingHostKey:
                 return "VM did not return SSH host key"
             case .rateLimited(let retryAfter):
