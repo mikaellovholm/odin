@@ -19,6 +19,27 @@ xcodebuild -project Odin.xcodeproj -scheme Odin_macOS build
 
 There are no tests, linter, or formatter configured.
 
+### Distribution (macOS)
+
+To hand the macOS app to someone else's Mac it must be **Developer ID-signed and notarized** — a plain Xcode build is signed for local development only and Gatekeeper will reject it on another machine. This is *not* App Store distribution, so no App Store Connect app record is needed.
+
+```bash
+# One-time: store notarization credentials in the login keychain.
+# App-specific password from account.apple.com -> Sign-In and Security.
+xcrun notarytool store-credentials odin-notary \
+  --apple-id <your-apple-id> --team-id <your-team-id> --password <app-specific-pw>
+
+# Every release: archive -> Developer ID sign -> notarize -> staple -> zip.
+./scripts/release.sh   # produces build/Odin.zip, ready to send
+```
+
+`scripts/release.sh` **auto-detects the team ID from the `Developer ID Application` certificate in the keychain** and passes `DEVELOPMENT_TEAM` to `xcodebuild` on the command line, so no team ID ever lands in source. Prerequisites: full Xcode (not just Command Line Tools), a paid Apple Developer Program membership, and a `Developer ID Application` cert with its private key in *this* Mac's keychain (create via Xcode -> Settings -> Accounts -> Manage Certificates -> + ; the private key is machine-local and does not sync).
+
+**Gotchas that cost real time:**
+- An Apple ID with a paid membership also has a free **Personal Team**, and both can share the same display name in Xcode's Team dropdown. The dropdown often shows only the Personal Team. Don't trust the team *name* — check the **Signing Certificate**'s team ID. The release script sidesteps the dropdown entirely by forcing the team on the CLI.
+- `-allowProvisioningUpdates` (used by the script) auto-registers the App ID and the iCloud container under the signing team on first archive, so the CloudKit entitlement doesn't block distribution. If it ever does, create the `iCloud.<bundle-id>` container under the team in the developer portal.
+- Verify a build with `spctl -a -vvv -t install build/export/Odin.app` (expect `source=Notarized Developer ID`).
+
 ## Architecture
 
 **Odin** is a personal productivity app (Todos, Notes, Remote/SSH; plus Claude sessions on macOS) for iPhone and Mac, built as a single multiplatform SwiftUI project targeting iOS 18+ and macOS 15+.
@@ -185,7 +206,7 @@ The VM target (`GCP_PROJECT` / `GCP_ZONE` / `GCP_INSTANCE`) is read from env var
 - **Worker permissions**: Spawned `claude -p` workers run with a scoped `--allowed-tools` list keyed off their role (reviewer / fixer / nil). No `--dangerously-skip-permissions`. Tools outside the list fail closed.
 - **Prompt-injection wrapper**: Worker stdout is sanitised through `BackgroundClaudeRunner.sanitizeForWrapper` (replaces both `<odin-background-notification>` and `</odin-background-notification>`, case-insensitive) and capped at 8 KB before being injected into the parent's next user prompt via the `UserPromptSubmit` hook.
 - **Claude binary lookup**: `ClaudePath.resolve()` checks a fixed allow-list of install dirs only — no `which claude` fallback through a login shell, so a poisoned `~/.zshrc` can't redirect every session to an attacker binary. Spawn is direct (no `zsh -ilc` wrapper) with an explicit `PATH`.
-- **DEVELOPMENT_TEAM**: Left empty in `project.yml` — set manually in Xcode. Do not commit team IDs to the pbxproj.
+- **DEVELOPMENT_TEAM**: Left empty in `project.yml` — set manually in Xcode for local builds, or supplied on the `xcodebuild` command line for releases (see Build System → Distribution). Never commit team IDs to `project.yml`/pbxproj; `scripts/release.sh` auto-detects the team from the keychain instead.
 
 ## Platform Considerations
 
