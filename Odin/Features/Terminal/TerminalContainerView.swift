@@ -6,6 +6,7 @@ struct TerminalContainerView: View {
     @State private var keyboardDismissed = false
     @AppStorage(TerminalFontSettings.key) private var fontSize: Double = Double(TerminalFontSettings.defaultSize)
     @AppStorage(TerminalViewModel.sshUsernameKey) private var sshUsername: String = ""
+    @AppStorage(TerminalViewModel.functionURLKey) private var functionURL: String = ""
     #if os(iOS)
     @State private var keyboardVisible = false
     #endif
@@ -279,9 +280,41 @@ struct TerminalContainerView: View {
                 Text("Terminal Setup")
                     .font(.title2.bold())
 
-                // SSH username section — must come first; the connect flow
-                // refuses to proceed without it (no more hard-coded user).
-                if sshUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                // Cloud Function URL — must come first; nothing is baked in,
+                // so each user points Odin at their own VM-starter deployment.
+                if TerminalViewModel.functionURL == nil {
+                    Text("Enter the VM-starter Cloud Function URL:")
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+
+                    TextField("https://…cloudfunctions.net/…", text: $functionURL)
+                        .font(.system(.caption, design: .monospaced))
+                        .textFieldStyle(.roundedBorder)
+                        .padding(.horizontal)
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                        #endif
+                        .autocorrectionDisabled()
+
+                    Text("The HTTPS endpoint of your deployed `claude-dev-starter` function.")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+
+                    Button("Save URL") {
+                        functionURL = functionURL.trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    // Shares `TerminalViewModel.parseFunctionURL`'s rule:
+                    // require a parseable https URL before accepting.
+                    .disabled(!isValidFunctionURL(functionURL))
+                }
+
+                // SSH username section — the connect flow refuses to proceed
+                // without it (no more hard-coded user).
+                else if sshUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text("Enter the SSH username for the VM:")
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -380,6 +413,10 @@ struct TerminalContainerView: View {
             }
             .padding()
         }
+    }
+
+    private func isValidFunctionURL(_ raw: String) -> Bool {
+        TerminalViewModel.parseFunctionURL(raw) != nil
     }
 
     private func copyToClipboard(_ string: String) {

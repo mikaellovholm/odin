@@ -2,9 +2,12 @@ const functions = require("@google-cloud/functions-framework");
 const { InstancesClient } = require("@google-cloud/compute");
 const crypto = require("crypto");
 
-const PROJECT = "claude-dev-ml-01";
-const ZONE = "europe-north1-a";
-const INSTANCE = "claude-dev-vm";
+// VM target is read from env so the function source carries no deployment
+// identifiers — each user points it at their own project/zone/instance via
+// --set-env-vars at deploy time. Missing values fail closed (see handler).
+const PROJECT = process.env.GCP_PROJECT;
+const ZONE = process.env.GCP_ZONE;
+const INSTANCE = process.env.GCP_INSTANCE;
 
 // In-memory rate limit. Cloud Functions can spin up multiple instances under
 // load, so this is per-instance — fine for a personal app where the goal is
@@ -21,6 +24,12 @@ functions.http("claude-dev-starter", async (req, res) => {
   const apiKey = process.env.API_KEY;
   if (!apiKey) {
     console.error("API_KEY env var is not set; refusing requests");
+    return res.status(500).json({ error: "server_misconfigured" });
+  }
+  if (!PROJECT || !ZONE || !INSTANCE) {
+    console.error(
+      "GCP_PROJECT / GCP_ZONE / GCP_INSTANCE env vars are not all set; refusing requests"
+    );
     return res.status(500).json({ error: "server_misconfigured" });
   }
   const provided = req.headers["x-api-key"];

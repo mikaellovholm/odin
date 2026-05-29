@@ -8,11 +8,37 @@ final class TerminalViewModel {
     /// the same key. Default is empty so a fresh install lands in the setup
     /// flow rather than connecting as some hard-coded user.
     static let sshUsernameKey = "ssh.username"
+    /// `@AppStorage` key for the VM-starter Cloud Function URL. Exposed so
+    /// Settings and the setup flow can bind the same key. Default is empty so
+    /// a fresh install lands in the setup flow rather than pointing at some
+    /// hard-coded project — every user points Odin at their own deployment.
+    static let functionURLKey = "cloud.functionURL"
     private static let sshPort = 22
 
     private static var sshUsername: String {
         UserDefaults.standard.string(forKey: sshUsernameKey)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    /// Parses a raw string into a valid Cloud Function endpoint, or `nil` when
+    /// it's empty/malformed. Requires an `https` scheme so a typo fails here
+    /// rather than at request time. Single source of truth for both the
+    /// persisted `functionURL` and the setup flow's live field validation.
+    nonisolated static func parseFunctionURL(_ raw: String?) -> URL? {
+        guard let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty,
+              let url = URL(string: trimmed),
+              url.scheme == "https" else {
+            return nil
+        }
+        return url
+    }
+
+    /// The configured Cloud Function endpoint, or `nil` when unset/malformed.
+    /// `VMStarterService` reads this; the connect flow falls back to
+    /// `.setupRequired` when it's `nil`.
+    nonisolated static var functionURL: URL? {
+        parseFunctionURL(UserDefaults.standard.string(forKey: functionURLKey))
     }
 
     /// Auto-reconnect schedule (seconds) for unexpected drops. Caps at 30 s so
@@ -85,7 +111,8 @@ final class TerminalViewModel {
 
         guard SSHKeyManager.hasKey(),
               APIKeyManager.get() != nil,
-              !Self.sshUsername.isEmpty else {
+              !Self.sshUsername.isEmpty,
+              Self.functionURL != nil else {
             state = .setupRequired
             return
         }

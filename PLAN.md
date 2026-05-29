@@ -105,14 +105,14 @@ SSHHostConfig was originally planned but not implemented — the app hardcodes t
 ## Terminal Architecture
 
 ### GCP VM Details
-- **VM**: `claude-dev-vm` in `europe-north1-a` (e2-small, Ubuntu 24.04)
+- **VM**: `<vm-name>` in `<zone>` (e2-small, Ubuntu 24.04)
 - **IP**: Ephemeral — obtained via Cloud Function
-- **Cloud Function**: `GET https://europe-north1-claude-dev-ml-01.cloudfunctions.net/claude-dev-starter`
+- **Cloud Function**: `GET https://<region>-<gcp-project-id>.cloudfunctions.net/claude-dev-starter` (configured at runtime in Settings)
   - Authenticates via `X-API-Key` header (validated against `API_KEY` env var)
   - Starts VM if stopped, returns `{"status": "...", "ip": "...", "hostKey": "..."}`
   - Status: `started` (was stopped, booting), `running` (already up)
   - `hostKey`: full OpenSSH public key (e.g. `ssh-ed25519 AAAA...`) from VM instance metadata
-- **SSH user**: `mikael_lovholm_gmail_com` (GCP OS Login)
+- **SSH user**: GCP OS Login username (configured at runtime in Settings)
 - **Auth**: Ed25519 key (added to GCP via `gcloud compute os-login ssh-keys add`)
 - **tmux**: Auto-attaches on SSH — no manual `tmux attach` needed
 - **Auto-shutdown**: 20 min with no SSH sessions
@@ -131,7 +131,7 @@ SwiftTerm TerminalView (via Representable wrapper)
     ↕  feed(byteArray:) / send(data:)
 Citadel SSHClient (PTY channel, xterm-256color)
     ↓
-GCP VM (claude-dev-vm, ephemeral IP from Cloud Function)
+GCP VM (ephemeral IP from Cloud Function)
 ```
 
 - SwiftTerm provides terminal emulation (renders escape sequences, handles input)
